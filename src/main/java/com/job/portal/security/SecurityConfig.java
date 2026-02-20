@@ -29,7 +29,7 @@ public class SecurityConfig {
 
     // Read CORS allowed origins from environment-specific configuration
     //@Value("${app.cors.allowed-origins:http://localhost:3000}")
-    @Value("${app.cors.allowed-origins}")
+    @Value("${APP_CORS_ALLOWED_ORIGINS}")
     private String allowedOrigins;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
