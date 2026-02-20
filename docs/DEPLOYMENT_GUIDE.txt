@@ -1,0 +1,149 @@
+================================================================================
+                    DEPLOYMENT GUIDE - QUICK START
+                Environment-Specific Configuration
+================================================================================
+
+This guide shows you how to deploy the Job Portal Backend in different
+environments after implementing the security fixes.
+
+================================================================================
+OPTION 1: LOCAL DEVELOPMENT
+================================================================================
+
+STEP 1: Create .env file
+-------------------------
+cd e:\myproject\findsharp\Job-Portal-Backend-master
+copy .env.dev.example .env
+
+STEP 2: Edit .env file (optional)
+----------------------------------
+# Update if your MySQL settings are different
+MYSQL_HOST=localhost
+MYSQL_DATABASE=job_portal_dev
+MYSQL_USER=root
+MYSQL_PASSWORD=root
+
+STEP 3: Run the application
+----------------------------
+# Option A: Using Maven with profile
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+# Option B: Set environment variable first
+$env:SPRING_PROFILES_ACTIVE="dev"  # Windows PowerShell
+mvn spring-boot:run
+
+# Option C: Using IDE (IntelliJ IDEA / Eclipse)
+# Set environment variable in Run Configuration:
+# SPRING_PROFILES_ACTIVE=dev
+
+STEP 4: Verify
+--------------
+# Application should start on http://localhost:8080
+# Check logs for: "The following 1 profile is active: dev"
+
+================================================================================
+OPTION 2: KUBERNETES DEPLOYMENT (Staging/Production)
+================================================================================
+
+PREREQUISITE: Kubernetes cluster is running
+
+STEP 1: Create namespace
+-------------------------
+kubectl create namespace job-portal
+
+STEP 2: Create Secrets (IMPORTANT!)
+------------------------------------
+# Generate strong passwords
+$DB_PASSWORD = openssl rand -base64 32
+$JWT_SECRET = openssl rand -base64 64
+
+# Create secret
+kubectl create secret generic jobportal-secrets `
+  --from-literal=MYSQL_USER=staging_user `
+  --from-literal=MYSQL_PASSWORD=$DB_PASSWORD `
+  --from-literal=JWT_SECRET=$JWT_SECRET `
+  -n job-portal
+
+# CRITICAL: Back up these secrets!
+echo "DB_PASSWORD: $DB_PASSWORD" >> secrets-backup.txt
+echo "JWT_SECRET: $JWT_SECRET" >> secrets-backup.txt
+
+STEP 3: Update ConfigMap
+-------------------------
+# Edit k8s/jobportal-config.yaml
+# Update these values:
+# - SPRING_PROFILES_ACTIVE: "staging" or "prod"
+# - APP_CORS_ALLOWED_ORIGINS: your frontend URL
+# - MYSQL_HOST: your database host
+
+STEP 4: Apply Kubernetes resources
+-----------------------------------
+kubectl apply -f k8s/jobportal-config.yaml -n job-portal
+kubectl apply -f k8s/job-portal-deployment.yaml -n job-portal
+kubectl apply -f k8s/job-portal-service.yaml -n job-portal
+
+STEP 5: Verify deployment
+--------------------------
+kubectl get pods -n job-portal
+kubectl logs -f <pod-name> -n job-portal
+
+# Check for: "The following 1 profile is active: staging"
+
+================================================================================
+OPTION 3: DOCKER COMPOSE (Local Testing)
+================================================================================
+
+Coming soon - Docker Compose configuration for local testing with all services.
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "Could not resolve placeholder 'JWT_SECRET'"
+SOLUTION: Environment variable not set. Check .env file or Kubernetes Secret.
+
+PROBLEM: "Access denied for user"
+SOLUTION: Check database credentials in .env or Kubernetes Secret.
+
+PROBLEM: Application starts but CORS errors
+SOLUTION: Check APP_CORS_ALLOWED_ORIGINS matches your frontend URL.
+
+PROBLEM: Health check failing
+SOLUTION: Ensure Spring Boot Actuator is enabled and endpoints are accessible.
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+Development:
+[ ] Application starts with dev profile
+[ ] Can access http://localhost:8080/api/jobs
+[ ] Debug logs are visible
+[ ] CORS works with frontend
+
+Staging/Production:
+[ ] All secrets created in Kubernetes
+[ ] ConfigMap applied successfully
+[ ] Pods are running (kubectl get pods)
+[ ] Health checks passing
+[ ] Logs show correct profile active
+[ ] Can access API through service
+[ ] CORS restricted to correct domains
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+After successful deployment:
+1. Test all API endpoints
+2. Verify authentication works
+3. Check logging and monitoring
+4. Test CORS with frontend
+5. Verify database connectivity
+6. Review security settings
+
+For detailed information, see:
+- docs/SECURITY_FIXES_WEEK1-2.txt (comprehensive guide)
+- PRODUCTION_READINESS_GUIDE.txt (full production checklist)
+
+================================================================================

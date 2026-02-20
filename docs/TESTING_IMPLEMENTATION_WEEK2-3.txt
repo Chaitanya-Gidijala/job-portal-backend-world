@@ -1,0 +1,656 @@
+================================================================================
+                    TESTING IMPLEMENTATION GUIDE
+                        Week 2-3: Comprehensive Testing
+================================================================================
+
+Date: 2025-11-29
+Application: Job Portal Backend
+Target: 80% Code Coverage
+
+================================================================================
+SECTION 1: OVERVIEW
+================================================================================
+
+This guide covers the implementation of comprehensive testing for the Job Portal
+Backend application, including:
+
+1. Unit Tests (80% coverage target)
+2. Integration Tests
+3. Security Tests
+4. Performance Tests
+5. Load Tests (1000+ concurrent users)
+
+================================================================================
+SECTION 2: TESTING DEPENDENCIES ADDED
+================================================================================
+
+The following dependencies have been added to pom.xml:
+
+✅ spring-boot-starter-test
+   - JUnit 5 (Jupiter)
+   - Mockito
+   - AssertJ
+   - Spring Test
+
+✅ spring-security-test
+   - Security testing utilities
+   - @WithMockUser annotation
+   - SecurityMockMvcConfigurers
+
+✅ h2
+   - In-memory database for testing
+   - Fast test execution
+   - No external database required
+
+✅ rest-assured
+   - API testing framework
+   - Fluent API for HTTP requests
+   - JSON/XML response validation
+
+✅ testcontainers (3 modules)
+   - testcontainers-core
+   - testcontainers-mysql
+   - testcontainers-junit-jupiter
+   - Real MySQL container for integration tests
+
+✅ jacoco-maven-plugin
+   - Code coverage reporting
+   - 80% coverage enforcement
+   - HTML and XML reports
+
+================================================================================
+SECTION 3: PROJECT STRUCTURE FOR TESTS
+================================================================================
+
+src/test/java/com/job/portal/
+├── service/
+│   ├── JobServiceImplTest.java
+│   └── RequestLogServiceTest.java
+├── controller/
+│   ├── JobControllerTest.java
+│   └── RequestLogControllerTest.java
+├── security/
+│   ├── JwtTokenProviderTest.java
+│   ├── JwtAuthenticationFilterTest.java
+│   └── SecurityConfigTest.java
+├── integration/
+│   ├── JobApiIntegrationTest.java
+│   ├── SecurityIntegrationTest.java
+│   └── DatabaseIntegrationTest.java
+├── config/
+│   └── TestConfig.java
+└── util/
+    └── TestDataBuilder.java
+
+src/test/resources/
+├── application-test.properties
+└── data.sql (optional test data)
+
+================================================================================
+SECTION 4: TEST CONFIGURATION FILES
+================================================================================
+
+FILE: src/test/resources/application-test.properties
+--------------------------------------------------------
+# H2 In-Memory Database for Unit Tests
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+
+# JPA Configuration for Tests
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto=create-drop
+spring.jpa.show-sql=false
+
+# Disable security for some tests
+spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+
+# JWT Configuration for Tests
+app.jwt-secret=test-secret-key-for-unit-tests-only-minimum-256-bits
+app.jwt-expiration-milliseconds=3600000
+
+# Auth Service (mock)
+app.auth-service.url=http://localhost:8085
+app.cors.allowed-origins=http://localhost:3000
+
+# Logging
+logging.level.org.springframework=WARN
+logging.level.com.job.portal=DEBUG
+
+
+FILE: src/test/java/com/job/portal/config/TestConfig.java
+--------------------------------------------------------
+@TestConfiguration
+public class TestConfig {
+    
+    @Bean
+    @Primary
+    public ModelMapper testModelMapper() {
+        return new ModelMapper();
+    }
+    
+    @Bean
+    @Primary
+    public JwtTokenProvider testJwtTokenProvider() {
+        return new JwtTokenProvider();
+    }
+}
+
+================================================================================
+SECTION 5: UNIT TESTS IMPLEMENTATION
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1. SERVICE LAYER TESTS                                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+FILE: JobServiceImplTest.java
+------------------------------
+Tests to implement:
+
+✓ getAllJobs_ShouldReturnAllJobs()
+✓ getJobById_WhenJobExists_ShouldReturnJob()
+✓ getJobById_WhenJobNotFound_ShouldThrowException()
+✓ saveJob_ShouldSaveAndReturnJob()
+✓ saveJob_WithInvalidData_ShouldThrowException()
+✓ updateJob_WhenJobExists_ShouldUpdateAndReturn()
+✓ updateJob_WhenJobNotFound_ShouldThrowException()
+✓ deleteJob_WhenJobExists_ShouldDelete()
+✓ deleteJob_WhenJobNotFound_ShouldThrowException()
+✓ getJobsByExperience_ShouldReturnFilteredJobs()
+✓ getLatestJobs_ShouldReturnSortedJobs()
+✓ searchJobs_WithCriteria_ShouldReturnPagedResults()
+✓ saveAllJobs_ShouldSaveBatchAndReturnAll()
+
+Coverage Target: 90%+
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 2. CONTROLLER LAYER TESTS                                                │
+└─────────────────────────────────────────────────────────────────────────┘
+
+FILE: JobControllerTest.java
+----------------------------
+Tests to implement:
+
+✓ getJobs_ShouldReturn200AndJobsList()
+✓ getJobs_WhenNoJobs_ShouldReturn204()
+✓ getJob_WhenExists_ShouldReturn200AndJob()
+✓ getJob_WhenNotFound_ShouldReturn404()
+✓ createJob_WithValidData_ShouldReturn201()
+✓ createJob_WithInvalidData_ShouldReturn400()
+✓ createJob_WithoutAuth_ShouldReturn401()
+✓ createJob_WithUserRole_ShouldReturn403()
+✓ updateJob_WithValidData_ShouldReturn200()
+✓ deleteJob_WithAdminRole_ShouldReturn204()
+✓ deleteJob_WithRecruiterRole_ShouldReturn403()
+✓ searchJobs_WithFilters_ShouldReturnPagedResults()
+✓ createJobsBatch_ShouldReturn201AndAllJobs()
+
+Coverage Target: 85%+
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 3. SECURITY TESTS                                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+FILE: JwtTokenProviderTest.java
+-------------------------------
+Tests to implement:
+
+✓ generateToken_ShouldCreateValidToken()
+✓ getUsernameFromToken_ShouldExtractUsername()
+✓ validateToken_WithValidToken_ShouldReturnTrue()
+✓ validateToken_WithExpiredToken_ShouldReturnFalse()
+✓ validateToken_WithInvalidToken_ShouldReturnFalse()
+✓ validateToken_WithTamperedToken_ShouldReturnFalse()
+
+FILE: JwtAuthenticationFilterTest.java
+--------------------------------------
+Tests to implement:
+
+✓ doFilterInternal_WithValidToken_ShouldAuthenticate()
+✓ doFilterInternal_WithInvalidToken_ShouldNotAuthenticate()
+✓ doFilterInternal_WithoutToken_ShouldContinueChain()
+✓ doFilterInternal_WithExpiredToken_ShouldNotAuthenticate()
+
+Coverage Target: 90%+
+
+
+================================================================================
+SECTION 6: INTEGRATION TESTS IMPLEMENTATION
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ API INTEGRATION TESTS                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+FILE: JobApiIntegrationTest.java
+--------------------------------
+Uses @SpringBootTest and TestRestTemplate
+
+Tests to implement:
+
+✓ testCompleteJobLifecycle()
+  - Create job
+  - Retrieve job
+  - Update job
+  - Delete job
+
+✓ testJobSearch()
+  - Search by keyword
+  - Search by location
+  - Search by job type
+  - Pagination
+
+✓ testBatchJobCreation()
+  - Create multiple jobs
+  - Verify all created
+
+✓ testJobValidation()
+  - Missing required fields
+  - Invalid data formats
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SECURITY INTEGRATION TESTS                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+FILE: SecurityIntegrationTest.java
+----------------------------------
+Tests to implement:
+
+✓ testPublicEndpointsAccessible()
+  - GET /api/jobs (no auth required)
+  - GET /api/jobs/{id} (no auth required)
+
+✓ testProtectedEndpointsRequireAuth()
+  - POST /api/jobs (requires auth)
+  - PUT /api/jobs/{id} (requires auth)
+  - DELETE /api/jobs/{id} (requires auth)
+
+✓ testRoleBasedAccess()
+  - Admin can delete
+  - Recruiter can create/update
+  - User cannot create/update/delete
+
+✓ testJwtAuthentication()
+  - Valid token grants access
+  - Invalid token denies access
+  - Expired token denies access
+
+✓ testCorsConfiguration()
+  - Allowed origins work
+  - Disallowed origins blocked
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ DATABASE INTEGRATION TESTS                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+FILE: DatabaseIntegrationTest.java
+----------------------------------
+Uses Testcontainers with real MySQL
+
+Tests to implement:
+
+✓ testDatabaseConnection()
+✓ testJobRepository_CRUD()
+✓ testJobRepository_CustomQueries()
+✓ testTransactionRollback()
+✓ testDatabaseConstraints()
+
+
+================================================================================
+SECTION 7: PERFORMANCE TESTS
+================================================================================
+
+Tools: Apache JMeter or Gatling
+
+Test Scenarios:
+--------------
+
+1. API Response Time Test
+   - Target: < 200ms for simple queries
+   - Target: < 500ms for complex queries
+   - Measure: p50, p95, p99 latency
+
+2. Database Query Performance
+   - Test all repository methods
+   - Identify slow queries
+   - Add indexes where needed
+
+3. Throughput Test
+   - Measure requests/second
+   - Target: 1000+ req/sec for GET endpoints
+
+4. Resource Usage
+   - Monitor CPU usage
+   - Monitor memory usage
+   - Monitor database connections
+
+
+JMeter Test Plan Structure:
+---------------------------
+
+Job-Portal-Performance-Test.jmx
+├── Thread Group: Get All Jobs
+│   ├── HTTP Request: GET /api/jobs
+│   └── Assertions
+├── Thread Group: Get Job By ID
+│   ├── HTTP Request: GET /api/jobs/{id}
+│   └── Assertions
+├── Thread Group: Search Jobs
+│   ├── HTTP Request: GET /api/jobs/search
+│   └── Assertions
+└── Thread Group: Create Job (with auth)
+    ├── HTTP Request: POST /api/jobs
+    └── Assertions
+
+
+================================================================================
+SECTION 8: LOAD TESTS
+================================================================================
+
+Target: 1000+ Concurrent Users
+
+Test Scenarios:
+--------------
+
+1. Ramp-Up Test
+   - Start: 10 users
+   - Increment: +10 users every 10 seconds
+   - Peak: 1000 users
+   - Duration: 10 minutes
+
+2. Sustained Load Test
+   - Users: 1000 concurrent
+   - Duration: 30 minutes
+   - Measure: error rate, response time
+
+3. Spike Test
+   - Normal: 100 users
+   - Spike: 1000 users (sudden)
+   - Duration: 5 minutes
+   - Measure: recovery time
+
+4. Stress Test
+   - Gradually increase load until failure
+   - Find breaking point
+   - Measure: max concurrent users
+
+
+JMeter Configuration:
+--------------------
+
+Thread Group Settings:
+- Number of Threads: 1000
+- Ramp-Up Period: 100 seconds (10 users/sec)
+- Loop Count: 10
+- Duration: 600 seconds (10 minutes)
+
+Listeners:
+- Aggregate Report
+- View Results Tree
+- Response Time Graph
+- Transactions per Second
+
+
+Expected Results:
+----------------
+
+✓ Error Rate: < 1%
+✓ Average Response Time: < 500ms
+✓ 95th Percentile: < 1000ms
+✓ Throughput: > 500 req/sec
+✓ CPU Usage: < 80%
+✓ Memory Usage: < 80%
+
+
+================================================================================
+SECTION 9: RUNNING TESTS
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ UNIT TESTS                                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+# Run all tests
+mvn test
+
+# Run specific test class
+mvn test -Dtest=JobServiceImplTest
+
+# Run with coverage report
+mvn clean test jacoco:report
+
+# View coverage report
+# Open: target/site/jacoco/index.html
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ INTEGRATION TESTS                                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+# Run integration tests only
+mvn verify -P integration-tests
+
+# Run with Testcontainers
+# Docker must be running
+mvn verify
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PERFORMANCE TESTS                                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+# Using JMeter
+jmeter -n -t Job-Portal-Performance-Test.jmx -l results.jtl -e -o report/
+
+# Using Gatling
+mvn gatling:test
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ LOAD TESTS                                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+# Using JMeter
+jmeter -n -t Job-Portal-Load-Test.jmx -l load-results.jtl -e -o load-report/
+
+
+================================================================================
+SECTION 10: CODE COVERAGE REQUIREMENTS
+================================================================================
+
+Target Coverage: 80% (enforced by JaCoCo)
+
+Coverage by Component:
+---------------------
+
+Service Layer: 90%+
+- JobServiceImpl
+- RequestLogService
+
+Controller Layer: 85%+
+- JobController
+- RequestLogController
+
+Security Layer: 90%+
+- JwtTokenProvider
+- JwtAuthenticationFilter
+
+Excluded from Coverage:
+----------------------
+- Configuration classes (config/**)
+- DTOs (dto/**)
+- Entities (entity/**)
+- Main application class
+
+
+Viewing Coverage Report:
+-----------------------
+
+1. Run tests with coverage:
+   mvn clean test jacoco:report
+
+2. Open report:
+   target/site/jacoco/index.html
+
+3. Check coverage by package:
+   - Green: > 80% coverage
+   - Yellow: 50-80% coverage
+   - Red: < 50% coverage
+
+
+================================================================================
+SECTION 11: TEST DATA MANAGEMENT
+================================================================================
+
+Test Data Builder Pattern:
+-------------------------
+
+Create utility class for test data:
+
+public class TestDataBuilder {
+    
+    public static JobDTO createTestJobDTO() {
+        JobDTO job = new JobDTO();
+        job.setJobTitle("Software Engineer");
+        job.setCompany("Test Company");
+        job.setLocation("Remote");
+        job.setJobDetails("Test job details");
+        job.setExperience("Fresher");
+        job.setSalary("50000-70000");
+        job.setJobType("Full-time");
+        return job;
+    }
+    
+    public static List<JobDTO> createTestJobDTOList(int count) {
+        // Create list of test jobs
+    }
+}
+
+
+================================================================================
+SECTION 12: CONTINUOUS INTEGRATION
+================================================================================
+
+GitHub Actions Workflow:
+-----------------------
+
+name: Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+      - name: Run tests
+        run: mvn clean test
+      - name: Generate coverage report
+        run: mvn jacoco:report
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+
+
+================================================================================
+SECTION 13: BEST PRACTICES
+================================================================================
+
+1. Test Naming Convention
+   - methodName_condition_expectedResult()
+   - Example: getJobById_WhenJobExists_ShouldReturnJob()
+
+2. AAA Pattern
+   - Arrange: Set up test data
+   - Act: Execute the method under test
+   - Assert: Verify the results
+
+3. Test Independence
+   - Each test should be independent
+   - No shared state between tests
+   - Use @BeforeEach for setup
+
+4. Mock External Dependencies
+   - Mock repositories in service tests
+   - Mock services in controller tests
+   - Use @MockBean for Spring beans
+
+5. Test Edge Cases
+   - Null values
+   - Empty collections
+   - Boundary values
+   - Invalid input
+
+6. Keep Tests Fast
+   - Use in-memory database (H2)
+   - Mock external services
+   - Avoid Thread.sleep()
+
+
+================================================================================
+SECTION 14: TROUBLESHOOTING
+================================================================================
+
+PROBLEM: Tests fail with "Could not resolve placeholder"
+SOLUTION: Create application-test.properties with all required properties
+
+PROBLEM: Testcontainers fails to start
+SOLUTION: Ensure Docker is running
+
+PROBLEM: Coverage below 80%
+SOLUTION: Add more tests for uncovered code paths
+
+PROBLEM: Integration tests are slow
+SOLUTION: Use @DirtiesContext sparingly, reuse application context
+
+PROBLEM: Flaky tests
+SOLUTION: Remove time-dependent assertions, use awaitility library
+
+
+================================================================================
+SECTION 15: NEXT STEPS AFTER TESTING
+================================================================================
+
+Once testing is complete:
+
+Week 3-4: Monitoring & CI/CD
+----------------------------
+[ ] Set up Prometheus + Grafana
+[ ] Configure alerting
+[ ] Set up centralized logging (ELK)
+[ ] Create CI/CD pipeline
+[ ] Automated deployment
+
+Week 4-5: Security Hardening
+----------------------------
+[ ] Security audit
+[ ] Penetration testing
+[ ] Implement rate limiting
+[ ] Add WAF
+
+Week 5-6: Production Deployment
+-------------------------------
+[ ] Deploy to staging
+[ ] User acceptance testing
+[ ] Deploy to production
+[ ] Monitor for 48 hours
+
+
+================================================================================
+                        TESTING IMPLEMENTATION COMPLETE
+================================================================================
+
+This guide provides a comprehensive approach to testing the Job Portal Backend.
+Follow the sections in order to implement all required tests and achieve 80%+
+code coverage.
+
+For detailed test implementations, see the actual test files being created.
+
+================================================================================

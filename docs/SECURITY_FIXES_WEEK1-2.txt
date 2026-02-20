@@ -1,0 +1,520 @@
+================================================================================
+                    SECURITY FIXES IMPLEMENTATION GUIDE
+                        Week 1-2: Environment Configuration
+================================================================================
+
+Date: 2025-11-29
+Status: COMPLETED
+Application: Job Portal Backend
+
+================================================================================
+SECTION 1: WHAT WAS CHANGED
+================================================================================
+
+✅ COMPLETED SECURITY FIXES:
+
+1. Removed All Hardcoded Secrets
+   - Removed hardcoded JWT secret from application.properties
+   - Removed default database credentials
+   - All sensitive data now uses environment variables
+
+2. Created Environment-Specific Configuration Files
+   - application.properties (base configuration)
+   - application-dev.properties (development)
+   - application-staging.properties (staging)
+   - application-prod.properties (production)
+
+3. Updated Security Configuration
+   - Modified SecurityConfig.java for environment-based CORS
+   - Added actuator endpoint security
+   - Implemented dynamic CORS from configuration
+
+4. Created Environment Variable Templates
+   - .env.dev.example (development template)
+   - .env.staging.example (staging template)
+   - .env.prod.example (production template)
+
+5. Disabled Debug Logging
+   - Production: WARN level for most components
+   - Staging: INFO level
+   - Development: DEBUG level (for debugging)
+
+================================================================================
+SECTION 2: ENVIRONMENT-SPECIFIC REQUIREMENTS
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        DEVELOPMENT ENVIRONMENT                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PURPOSE: Local development and testing
+
+SECURITY REQUIREMENTS:
+✓ Use local MySQL database
+✓ Can use default credentials (root/root) for convenience
+✓ JWT secret can be a test value (NOT for production)
+✓ CORS can be permissive (localhost:3000, localhost:3001)
+✓ Debug logging enabled for troubleshooting
+✓ SQL logging enabled to see queries
+✓ Auto-update database schema (hibernate.ddl-auto=update)
+
+CONFIGURATION:
+- Profile: dev
+- Database: localhost:3306/job_portal_dev
+- Logging: DEBUG level
+- CORS: http://localhost:3000,http://localhost:3001
+- SSL: Disabled (local development)
+
+HOW TO RUN:
+1. Copy .env.dev.example to .env
+2. Update values if needed
+3. Run: mvn spring-boot:run -Dspring-boot.run.profiles=dev
+   Or set environment variable: SPRING_PROFILES_ACTIVE=dev
+
+WHAT YOU CAN DO:
+✓ Use simple passwords for testing
+✓ Enable verbose logging
+✓ Auto-update database schema
+✓ Use localhost CORS
+✓ Disable SSL for database
+
+WHAT YOU CANNOT DO:
+✗ Commit .env file to Git
+✗ Use production secrets
+✗ Expose to internet
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         STAGING ENVIRONMENT                              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PURPOSE: Pre-production testing with production-like configuration
+
+SECURITY REQUIREMENTS:
+✓ Use managed database service (AWS RDS, Google Cloud SQL)
+✓ Strong database credentials (from Kubernetes Secrets)
+✓ Cryptographically random JWT secret (256-bit minimum)
+✓ CORS restricted to staging frontend URLs only
+✓ Moderate logging (INFO level)
+✓ SQL logging disabled
+✓ Schema validation only (hibernate.ddl-auto=validate)
+✓ SSL enabled for database connections
+
+CONFIGURATION:
+- Profile: staging
+- Database: Managed service with SSL
+- Logging: INFO level
+- CORS: https://staging.yourapp.com
+- SSL: Required
+
+HOW TO DEPLOY:
+1. Create Kubernetes namespace: job-portal-staging
+2. Create Kubernetes Secrets (see commands below)
+3. Create Kubernetes ConfigMap
+4. Deploy application with staging profile
+
+KUBERNETES SECRET CREATION:
+
+# Create namespace
+kubectl create namespace job-portal-staging
+
+# Create database secret
+kubectl create secret generic job-portal-db-secret \
+  --from-literal=mysql-host=staging-mysql.example.com \
+  --from-literal=mysql-user=staging_user \
+  --from-literal=mysql-password=<strong-password> \
+  --from-literal=mysql-database=job_portal_staging \
+  -n job-portal-staging
+
+# Create JWT secret
+kubectl create secret generic job-portal-jwt-secret \
+  --from-literal=jwt-secret=$(openssl rand -base64 64) \
+  -n job-portal-staging
+
+# Create ConfigMap
+kubectl create configmap job-portal-config \
+  --from-literal=auth-service-url=http://auth-service:8085 \
+  --from-literal=cors-allowed-origins=https://staging.yourapp.com \
+  -n job-portal-staging
+
+WHAT YOU MUST DO:
+✓ Use Kubernetes Secrets for all sensitive data
+✓ Enable database SSL
+✓ Use strong passwords
+✓ Restrict CORS to staging URLs
+✓ Validate schema (no auto-updates)
+✓ Monitor logs and metrics
+✓ Test production-like scenarios
+
+WHAT YOU CANNOT DO:
+✗ Use default or weak passwords
+✗ Auto-update database schema
+✗ Use permissive CORS
+✗ Disable SSL
+✗ Use development secrets
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        PRODUCTION ENVIRONMENT                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PURPOSE: Live production system serving real users
+
+SECURITY REQUIREMENTS (CRITICAL):
+✓ Managed database with multi-AZ deployment
+✓ Cryptographically random JWT secret (NEVER reuse from other envs)
+✓ Strong database credentials (minimum 20 characters, complex)
+✓ CORS strictly limited to production domains
+✓ Minimal logging (WARN/ERROR only)
+✓ SQL logging completely disabled
+✓ Schema changes via migrations only (hibernate.ddl-auto=none)
+✓ SSL/TLS required for all connections
+✓ Secrets backed up in secure vault
+✓ Regular secret rotation (every 90 days)
+
+CONFIGURATION:
+- Profile: prod
+- Database: Managed service with multi-AZ, SSL, backups
+- Logging: WARN level (JSON format)
+- CORS: https://yourapp.com,https://www.yourapp.com
+- SSL: Required everywhere
+
+HOW TO DEPLOY:
+1. Create Kubernetes namespace: job-portal-prod
+2. Create Kubernetes Secrets (NEVER commit to Git)
+3. Back up secrets to secure vault (HashiCorp Vault, AWS Secrets Manager)
+4. Create Kubernetes ConfigMap
+5. Deploy with production profile
+6. Monitor for 48 hours
+
+KUBERNETES SECRET CREATION (PRODUCTION):
+
+# Create namespace
+kubectl create namespace job-portal-prod
+
+# Generate strong database password
+DB_PASSWORD=$(openssl rand -base64 32)
+
+# Create database secret
+kubectl create secret generic job-portal-db-secret \
+  --from-literal=mysql-host=prod-rds.example.com \
+  --from-literal=mysql-user=prod_user \
+  --from-literal=mysql-password=$DB_PASSWORD \
+  --from-literal=mysql-database=job_portal_prod \
+  -n job-portal-prod
+
+# Generate JWT secret (256-bit)
+JWT_SECRET=$(openssl rand -base64 64)
+
+# Create JWT secret
+kubectl create secret generic job-portal-jwt-secret \
+  --from-literal=jwt-secret=$JWT_SECRET \
+  -n job-portal-prod
+
+# CRITICAL: Back up secrets to secure vault immediately
+echo "DB_PASSWORD: $DB_PASSWORD" >> /secure/vault/prod-secrets-backup.txt
+echo "JWT_SECRET: $JWT_SECRET" >> /secure/vault/prod-secrets-backup.txt
+
+# Create ConfigMap
+kubectl create configmap job-portal-config \
+  --from-literal=auth-service-url=http://auth-service:8085 \
+  --from-literal=cors-allowed-origins=https://yourapp.com,https://www.yourapp.com \
+  -n job-portal-prod
+
+WHAT YOU MUST DO:
+✓ Use cryptographically random secrets
+✓ Back up all secrets to secure vault
+✓ Enable multi-AZ database deployment
+✓ Configure automated database backups
+✓ Enable SSL/TLS everywhere
+✓ Restrict CORS to production domains only
+✓ Use minimal logging
+✓ Monitor and alert on all errors
+✓ Implement secret rotation policy
+✓ Regular security audits
+✓ Penetration testing before launch
+✓ Disaster recovery plan tested
+
+WHAT YOU CANNOT DO:
+✗ Use any default values
+✗ Use weak or simple passwords
+✗ Reuse secrets from dev/staging
+✗ Auto-update database schema
+✗ Enable debug logging
+✗ Use permissive CORS
+✗ Disable SSL
+✗ Skip backups
+✗ Ignore security alerts
+
+
+================================================================================
+SECTION 3: CONFIGURATION FILES BREAKDOWN
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FILE: application.properties (BASE CONFIGURATION)                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PURPOSE: Common settings shared across all environments
+
+KEY FEATURES:
+- No hardcoded secrets (all use environment variables)
+- No default values for sensitive data
+- Common database driver and JPA settings
+- Base Hikari connection pool settings
+
+REQUIRED ENVIRONMENT VARIABLES:
+- MYSQL_HOST (no default)
+- MYSQL_PORT (default: 3306)
+- MYSQL_DATABASE (no default)
+- MYSQL_USER (no default)
+- MYSQL_PASSWORD (no default)
+- JWT_SECRET (no default)
+- AUTH_SERVICE_URL (no default)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FILE: application-dev.properties (DEVELOPMENT)                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PURPOSE: Development-friendly settings
+
+KEY FEATURES:
+- Verbose logging (DEBUG level)
+- SQL query logging enabled
+- Auto-update database schema
+- Permissive CORS
+- Small connection pool (5 connections)
+- All actuator endpoints exposed
+- DevTools enabled
+
+WHEN TO USE: Local development only
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FILE: application-staging.properties (STAGING)                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PURPOSE: Production-like testing environment
+
+KEY FEATURES:
+- Moderate logging (INFO level)
+- SQL logging disabled
+- Schema validation only (no auto-updates)
+- Restricted CORS
+- Medium connection pool (15 connections)
+- Limited actuator endpoints
+- SSL required
+
+WHEN TO USE: Pre-production testing, QA, UAT
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FILE: application-prod.properties (PRODUCTION)                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PURPOSE: Production deployment
+
+KEY FEATURES:
+- Minimal logging (WARN level)
+- JSON log format
+- No schema auto-updates
+- Strict CORS
+- Large connection pool (30 connections)
+- Minimal actuator endpoints
+- SSL required everywhere
+- Performance optimizations
+
+WHEN TO USE: Production only
+
+
+================================================================================
+SECTION 4: HOW TO USE IN DIFFERENT ENVIRONMENTS
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ LOCAL DEVELOPMENT (Your Computer)                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+STEP 1: Create .env file
+cp .env.dev.example .env
+
+STEP 2: Edit .env file with your local settings
+# Update database credentials if needed
+MYSQL_HOST=localhost
+MYSQL_DATABASE=job_portal_dev
+MYSQL_USER=root
+MYSQL_PASSWORD=root
+
+STEP 3: Run application
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+OR set environment variable:
+export SPRING_PROFILES_ACTIVE=dev  # Linux/Mac
+$env:SPRING_PROFILES_ACTIVE="dev"  # Windows PowerShell
+
+Then run:
+mvn spring-boot:run
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ KUBERNETES DEPLOYMENT (Staging/Production)                              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+STEP 1: Create Kubernetes Secrets (see Section 2 for commands)
+
+STEP 2: Update deployment YAML to use secrets
+
+STEP 3: Deploy application
+kubectl apply -f k8s/ -n job-portal-staging
+
+STEP 4: Verify deployment
+kubectl get pods -n job-portal-staging
+kubectl logs <pod-name> -n job-portal-staging
+
+
+================================================================================
+SECTION 5: SECURITY BEST PRACTICES BY ENVIRONMENT
+================================================================================
+
+DEVELOPMENT:
+✓ Keep .env file in .gitignore
+✓ Never commit actual passwords
+✓ Use separate database from staging/prod
+✓ Rotate test secrets periodically
+✓ Don't expose dev environment to internet
+
+STAGING:
+✓ Use Kubernetes Secrets for all sensitive data
+✓ Enable database SSL
+✓ Use strong passwords (minimum 16 characters)
+✓ Restrict network access
+✓ Monitor logs for security issues
+✓ Test security features thoroughly
+✓ Use separate database from production
+
+PRODUCTION:
+✓ Cryptographically random secrets (256-bit minimum)
+✓ Store secrets in secure vault (Vault, AWS Secrets Manager)
+✓ Enable multi-factor authentication for cluster access
+✓ Implement secret rotation (every 90 days)
+✓ Enable audit logging
+✓ Regular security scans
+✓ Penetration testing
+✓ Disaster recovery plan
+✓ Incident response plan
+✓ 24/7 monitoring and alerting
+
+
+================================================================================
+SECTION 6: TROUBLESHOOTING
+================================================================================
+
+PROBLEM: Application won't start - "Could not resolve placeholder"
+SOLUTION: Environment variable not set. Check that all required variables
+          are defined in your .env file or Kubernetes Secret.
+
+PROBLEM: Database connection failed
+SOLUTION: 
+  - Dev: Check MySQL is running and credentials are correct
+  - Staging/Prod: Verify Kubernetes Secret values and database endpoint
+
+PROBLEM: CORS errors in browser
+SOLUTION: Check app.cors.allowed-origins matches your frontend URL
+
+PROBLEM: JWT authentication failing
+SOLUTION: Verify JWT_SECRET is set and matches across all services
+
+PROBLEM: Logs not showing
+SOLUTION: Check logging level in environment-specific properties file
+
+
+================================================================================
+SECTION 7: VERIFICATION CHECKLIST
+================================================================================
+
+DEVELOPMENT:
+[ ] Application starts with dev profile
+[ ] Can connect to local database
+[ ] Debug logs are visible
+[ ] CORS works with localhost:3000
+[ ] .env file is in .gitignore
+
+STAGING:
+[ ] All secrets in Kubernetes Secrets
+[ ] Database uses SSL
+[ ] CORS restricted to staging URL
+[ ] Schema validation works (no auto-updates)
+[ ] Logs are at INFO level
+[ ] Actuator endpoints secured
+
+PRODUCTION:
+[ ] All secrets in Kubernetes Secrets AND backed up to vault
+[ ] JWT secret is cryptographically random
+[ ] Database has multi-AZ deployment
+[ ] Automated backups configured
+[ ] SSL enabled everywhere
+[ ] CORS restricted to production domains only
+[ ] Logging at WARN level
+[ ] Monitoring and alerting configured
+[ ] Disaster recovery plan tested
+[ ] Security audit completed
+
+
+================================================================================
+SECTION 8: NEXT STEPS
+================================================================================
+
+COMPLETED:
+✅ Removed all hardcoded secrets
+✅ Created environment-specific config files
+✅ Implemented proper secret management
+✅ Fixed CORS configuration for production
+✅ Disabled debug logging in production
+
+NEXT (Week 3-4):
+[ ] Implement comprehensive unit tests
+[ ] Add integration tests
+[ ] Set up CI/CD pipeline
+[ ] Configure monitoring (Prometheus + Grafana)
+[ ] Set up centralized logging (ELK Stack)
+[ ] Implement rate limiting
+[ ] Add health check endpoints
+[ ] Performance testing
+
+
+================================================================================
+SECTION 9: IMPORTANT REMINDERS
+================================================================================
+
+🔴 CRITICAL:
+- NEVER commit .env files to Git
+- NEVER use production secrets in dev/staging
+- NEVER use default passwords in production
+- ALWAYS back up production secrets to secure vault
+- ALWAYS use SSL in staging and production
+
+🟡 IMPORTANT:
+- Rotate secrets every 90 days
+- Monitor logs for security events
+- Keep dependencies updated
+- Regular security audits
+- Test disaster recovery procedures
+
+🟢 RECOMMENDED:
+- Use managed database services
+- Implement secret scanning in CI/CD
+- Enable audit logging
+- Use infrastructure as code
+- Document all security procedures
+
+
+================================================================================
+                            END OF GUIDE
+================================================================================
+
+For questions or issues, refer to:
+- PRODUCTION_READINESS_GUIDE.txt (comprehensive production guide)
+- PRODUCTION_READINESS_SUMMARY.txt (quick reference)
+- Environment-specific .env.*.example files
+================================================================================
