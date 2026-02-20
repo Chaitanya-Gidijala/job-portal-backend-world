@@ -140,7 +140,7 @@ You can customize the application behavior using environment variables:
 | `SPRING_DATASOURCE_PASSWORD` | Database password | `root` |
 | `APP_JWT_SECRET` | JWT secret key | (from application.properties) |
 | `APP_JWT_EXPIRATION_MILLISECONDS` | JWT expiration time | `604800000` (7 days) |
-| `APP_CORS_ALLOWED_ORIGINS` | Allowed CORS origins | `http://localhost:5173,http://localhost:3000` |
+| `APP_CORS_ALLOWED_ORIGINS` | Allowed CORS origins | `http://localhost:5173,http://localhost:3000,https://www.chaitanyatechworld.com,https://chaitanyatechworld.com` |
 | `SERVER_PORT` | Application port | `8080` |
 
 ## Health Check
