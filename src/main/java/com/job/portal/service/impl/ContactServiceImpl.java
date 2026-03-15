@@ -121,7 +121,7 @@ public class ContactServiceImpl implements ContactService {
             "                <div class='info-item'><span class='label'>Name:</span> <span class='value'>%s</span></div>" +
             "                <div class='info-item'><span class='label'>Email:</span> <span class='value'><a href='mailto:%s' style='color: #3498db; text-decoration: none;'>%s</a></span></div>" +
             "                <div class='info-item'><span class='label'>Phone:</span> <span class='value'>%s</span></div>" +
-            "                <div class='info-item'><span class='label'>Budget:</span> <span class='value'>$%d</span></div>" +
+            "                <div class='info-item'><span class='label'>Budget:</span> <span class='value'>%d</span></div>" +
             "            </div>" +
             "            " +
             "            <div class='section-title'>Message Preview</div>" +
@@ -203,10 +203,9 @@ public class ContactServiceImpl implements ContactService {
             "            <tr>" +
             "                <td class='footer'>" +
             "                    <div class='social-links'>" +
-            "                        <a href='#'>LinkedIn</a> • <a href='#'>Twitter</a> • <a href='#'>GitHub</a>" +
+            "                        <a href='https://www.chaitanyatechworld.com'>Chaitanya Tech World</a>" +
             "                    </div>" +
-            "                    <div>&copy; 2026 ChaitanyaTechWorld Portal. All rights reserved.</div>" +
-            "                    <div style='margin-top: 8px;'>123 Innovation Drive, Tech City, TC 54321</div>" +
+            "                    <div>&copy; 2026 ChaitanyaTechWorld. All rights reserved.</div>" +
             "                </td>" +
             "            </tr>" +
             "        </table>" +
