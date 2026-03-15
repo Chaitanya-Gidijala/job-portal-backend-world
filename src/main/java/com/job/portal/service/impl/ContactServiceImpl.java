@@ -148,37 +148,68 @@ public class ContactServiceImpl implements ContactService {
             "<!DOCTYPE html>" +
             "<html>" +
             "<head>" +
+            "    <meta charset='UTF-8'>" +
+            "    <meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
             "    <style>" +
-            "        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f7f6; }" +
-            "        .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e1e8ed; }" +
-            "        .header { background: linear-gradient(135deg, #3498db 0%%, #2980b9 100%%); color: #ffffff; padding: 30px 20px; text-align: center; }" +
-            "        .header h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 1px; }" +
-            "        .content { padding: 30px 40px; text-align: center; }" +
-            "        .message-box { background: #f9f9f9; border-top: 4px solid #3498db; padding: 20px; border-radius: 4px; margin-top: 20px; color: #444; }" +
-            "        .footer { background: #f4f7f6; color: #95a5a6; padding: 20px; text-align: center; font-size: 12px; border-top: 1px solid #eee; }" +
+            "        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f8fafc; }" +
+            "        .wrapper { width: 100%%; table-layout: fixed; background-color: #f8fafc; padding-bottom: 40px; }" +
+            "        .main { background-color: #ffffff; margin: 0 auto; width: 100%%; max-width: 600px; border-spacing: 0; font-family: sans-serif; color: #334155; border-radius: 12px; overflow: hidden; margin-top: 40px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }" +
+            "        .header { background: linear-gradient(135deg, #0f172a 0%%, #1e293b 100%%); padding: 40px 20px; text-align: center; color: #ffffff; }" +
+            "        .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }" +
+            "        .content { padding: 40px; }" +
+            "        .greeting { font-size: 20px; font-weight: 700; color: #1e293b; margin-bottom: 16px; }" +
+            "        .message { font-size: 16px; color: #475569; margin-bottom: 32px; }" +
+            "        .service-badge { display: inline-block; padding: 6px 16px; background-color: #e2e8f0; color: #475569; border-radius: 9999px; font-size: 14px; font-weight: 600; margin-bottom: 24px; }" +
+            "        .steps-container { background-color: #f1f5f9; border-radius: 12px; padding: 24px; margin-bottom: 32px; }" +
+            "        .steps-title { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 16px; display: flex; align-items: center; }" +
+            "        .step-item { margin-bottom: 12px; font-size: 14px; display: flex; }" +
+            "        .step-number { background-color: #3b82f6; color: white; width: 22px; height: 22px; border-radius: 50%%; display: inline-block; text-align: center; line-height: 22px; font-size: 12px; font-weight: bold; margin-right: 12px; flex-shrink: 0; }" +
+            "        .footer { padding: 32px; text-align: center; color: #94a3b8; font-size: 13px; }" +
+            "        .social-links { margin-bottom: 16px; }" +
+            "        .social-links a { color: #64748b; text-decoration: none; margin: 0 8px; font-weight: 600; }" +
+            "        .divider { border-top: 1px solid #e2e8f0; margin: 32px 0; }" +
+            "        @media screen and (max-width: 600px) { .content { padding: 24px; } .main { margin-top: 20px; border-radius: 0; } }" +
             "    </style>" +
             "</head>" +
             "<body>" +
-            "    <div class='container'>" +
-            "        <div class='header'>" +
-            "            <h1>Thank You for Contacting Us</h1>" +
-            "        </div>" +
-            "        <div class='content'>" +
-            "            <p style='font-size: 18px; color: #2c3e50; font-weight: 500;'>Hi %s,</p>" +
-            "            <p>We've received your inquiry regarding <strong>%s</strong>. Our team is currently reviewing your message and will get back to you shortly.</p>" +
-            "            <div class='message-box'>" +
-            "                <p style='margin-bottom: 5px; font-weight: 600;'>What happens next?</p>" +
-            "                <ul style='text-align: left; margin: 0; padding-left: 20px;'>" +
-            "                   <li>Our experts will review your details.</li>" +
-            "                   <li>We will prepare some initial thoughts or questions.</li>" +
-            "                   <li>You will hear back from us typically within 24-48 hours.</li>" +
-            "                </ul>" +
-            "            </div>" +
-            "        </div>" +
-            "        <div class='footer'>" +
-            "            This is an automated confirmation from ChaitanyaTechWorld.<br>" +
-            "            &copy; 2026 ChaitanyaTechWorld Portal. All rights reserved." +
-            "        </div>" +
+            "    <div class='wrapper'>" +
+            "        <table class='main' align='center'>" +
+            "            <tr>" +
+            "                <td class='header'>" +
+            "                    <h1>ChaitanyaTechWorld</h1>" +
+            "                </td>" +
+            "            </tr>" +
+            "            <tr>" +
+            "                <td class='content'>" +
+            "                    <div class='greeting'>Hello %s,</div>" +
+            "                    <div class='message'>" +
+            "                        Thank you for reaching out! We've successfully received your inquiry regarding " +
+            "                        <span class='service-badge'>%s</span>.<br><br>" +
+            "                        Our team of experts is already reviewing your requirements. We aim to provide a personalized response that specifically addresses your project goals." +
+            "                    </div>" +
+            "                    " +
+            "                    <div class='steps-container'>" +
+            "                        <div class='steps-title'>Next Steps</div>" +
+            "                        <div class='step-item'><span class='step-number'>1</span> <span>Initial review of your project details and message.</span></div>" +
+            "                        <div class='step-item'><span class='step-number'>2</span> <span>Internal consultation to prep preliminary ideas.</span></div>" +
+            "                        <div class='step-item'><span class='step-number'>3</span> <span>A direct follow-up from one of our leads within 24-48 business hours.</span></div>" +
+            "                    </div>" +
+            "                    " +
+            "                    <div class='message' style='margin-bottom: 0;'>" +
+            "                        In the meantime, feel free to check out our latest projects and updates on our social platforms." +
+            "                    </div>" +
+            "                </td>" +
+            "            </tr>" +
+            "            <tr>" +
+            "                <td class='footer'>" +
+            "                    <div class='social-links'>" +
+            "                        <a href='#'>LinkedIn</a> • <a href='#'>Twitter</a> • <a href='#'>GitHub</a>" +
+            "                    </div>" +
+            "                    <div>&copy; 2026 ChaitanyaTechWorld Portal. All rights reserved.</div>" +
+            "                    <div style='margin-top: 8px;'>123 Innovation Drive, Tech City, TC 54321</div>" +
+            "                </td>" +
+            "            </tr>" +
+            "        </table>" +
             "    </div>" +
             "</body>" +
             "</html>",
