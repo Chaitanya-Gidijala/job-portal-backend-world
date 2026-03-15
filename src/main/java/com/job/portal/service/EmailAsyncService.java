@@ -1,12 +1,9 @@
 package com.job.portal.service;
 
 import com.job.portal.dto.ContactRequest;
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -15,14 +12,20 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class EmailAsyncService {
 
-    private final JavaMailSender mailSender;
+    private final org.springframework.web.client.RestTemplate restTemplate;
+
+    @Value("${brevo.api.key}")
+    private String brevoApiKey;
+
+    @Value("${brevo.api.url}")
+    private String brevoApiUrl;
 
     @Value("${app.admin-email}")
     private String adminEmail;
 
     @Async("taskExecutor")
     public void sendInquiryEmails(ContactRequest request, String adminHtmlContent, String userHtmlContent) {
-        log.info("Starting asynchronous email process for inquiry: {}", request.getServiceType());
+        log.info("Starting asynchronous Brevo HTTP email process for inquiry: {}", request.getServiceType());
         
         // 1. Send notification to Admin
         sendEmail(adminEmail, "New Inquiry: " + request.getServiceType(), adminHtmlContent);
@@ -33,18 +36,24 @@ public class EmailAsyncService {
 
     private void sendEmail(String to, String subject, String htmlContent) {
         try {
-            log.info("Sending email to {}...", to);
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            log.info("Sending Brevo HTTP email to {}...", to);
+            
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("api-key", brevoApiKey);
 
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(htmlContent, true);
+            java.util.Map<String, Object> body = new java.util.HashMap<>();
+            body.put("sender", java.util.Map.of("name", "ChaitanyaTechWorld", "email", "support@chaitanyatechworld.com"));
+            body.put("to", java.util.List.of(java.util.Map.of("email", to)));
+            body.put("subject", subject);
+            body.put("htmlContent", htmlContent);
 
-            mailSender.send(mimeMessage);
-            log.info("Email sent successfully to {}", to);
+            org.springframework.http.HttpEntity<java.util.Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(body, headers);
+            
+            restTemplate.postForEntity(brevoApiUrl, entity, String.class);
+            log.info("Brevo HTTP email sent successfully to {}", to);
         } catch (Exception e) {
-            log.error("Failed to send email to {}: {}", to, e.getMessage());
+            log.error("Failed to send Brevo HTTP email to {}: {}", to, e.getMessage());
         }
     }
 }
