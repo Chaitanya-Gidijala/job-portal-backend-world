@@ -7,12 +7,9 @@ import com.job.portal.repository.ContactRepository;
 import com.job.portal.service.ContactService;
 import java.util.List;
 import java.util.stream.Collectors;
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,10 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ContactServiceImpl implements ContactService {
 
     private final ContactRepository contactRepository;
-    private final JavaMailSender mailSender;
-
-    @Value("${app.admin-email}")
-    private String adminEmail;
+    private final com.job.portal.service.EmailAsyncService emailAsyncService;
 
     @Override
     @Transactional
@@ -47,22 +41,14 @@ public class ContactServiceImpl implements ContactService {
     }
 
     private void sendEmailNotification(ContactRequest request) {
-        log.info("Sending professional HTML email notification to admin...");
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-
-            helper.setTo(adminEmail);
-            helper.setSubject("New Inquiry: " + request.getServiceType());
-            
-            String htmlContent = generateHtmlContent(request);
-            helper.setText(htmlContent, true);
-
-            mailSender.send(mimeMessage);
-            log.info("Professional email notification sent successfully to admin.");
-        } catch (Exception e) {
-            log.error("Failed to send email notification: {}", e.getMessage());
-        }
+        log.info("Handing over email tasks to EmailAsyncService...");
+        
+        String adminHtmlContent = generateHtmlContent(request);
+        String userHtmlContent = generateUserConfirmationHtml(request);
+        
+        emailAsyncService.sendInquiryEmails(request, adminHtmlContent, userHtmlContent);
+        
+        log.info("Email tasks handed over successfully. API request unblocked.");
     }
 
     @Override
@@ -154,6 +140,50 @@ public class ContactServiceImpl implements ContactService {
             request.getPhone() != null ? request.getPhone() : "Not provided",
             request.getBudget() != null ? request.getBudget() : 0,
             request.getMessage()
+        );
+    }
+
+    private String generateUserConfirmationHtml(ContactRequest request) {
+        return String.format(
+            "<!DOCTYPE html>" +
+            "<html>" +
+            "<head>" +
+            "    <style>" +
+            "        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f7f6; }" +
+            "        .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e1e8ed; }" +
+            "        .header { background: linear-gradient(135deg, #3498db 0%%, #2980b9 100%%); color: #ffffff; padding: 30px 20px; text-align: center; }" +
+            "        .header h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 1px; }" +
+            "        .content { padding: 30px 40px; text-align: center; }" +
+            "        .message-box { background: #f9f9f9; border-top: 4px solid #3498db; padding: 20px; border-radius: 4px; margin-top: 20px; color: #444; }" +
+            "        .footer { background: #f4f7f6; color: #95a5a6; padding: 20px; text-align: center; font-size: 12px; border-top: 1px solid #eee; }" +
+            "    </style>" +
+            "</head>" +
+            "<body>" +
+            "    <div class='container'>" +
+            "        <div class='header'>" +
+            "            <h1>Thank You for Contacting Us</h1>" +
+            "        </div>" +
+            "        <div class='content'>" +
+            "            <p style='font-size: 18px; color: #2c3e50; font-weight: 500;'>Hi %s,</p>" +
+            "            <p>We've received your inquiry regarding <strong>%s</strong>. Our team is currently reviewing your message and will get back to you shortly.</p>" +
+            "            <div class='message-box'>" +
+            "                <p style='margin-bottom: 5px; font-weight: 600;'>What happens next?</p>" +
+            "                <ul style='text-align: left; margin: 0; padding-left: 20px;'>" +
+            "                   <li>Our experts will review your details.</li>" +
+            "                   <li>We will prepare some initial thoughts or questions.</li>" +
+            "                   <li>You will hear back from us typically within 24-48 hours.</li>" +
+            "                </ul>" +
+            "            </div>" +
+            "        </div>" +
+            "        <div class='footer'>" +
+            "            This is an automated confirmation from ChaitanyaTechWorld.<br>" +
+            "            &copy; 2026 ChaitanyaTechWorld Portal. All rights reserved." +
+            "        </div>" +
+            "    </div>" +
+            "</body>" +
+            "</html>",
+            request.getName(),
+            request.getServiceType()
         );
     }
 }
