@@ -34,9 +34,11 @@ build/
 
 ### Environment Files ###
 .env
+.env.*
 .env.local
 .env.*.local
 *.env.*
+*.env
 
 ### Logs ###
 logs/
