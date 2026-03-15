@@ -39,6 +39,7 @@ build/
 .env.*.local
 *.env.*
 *.env
+application-dev.properties
 
 ### Logs ###
 logs/
