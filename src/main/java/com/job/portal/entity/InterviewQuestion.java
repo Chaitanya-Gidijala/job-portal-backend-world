@@ -23,7 +23,7 @@ public class InterviewQuestion extends BaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String question;
 
-    @Column(nullable = false, columnDefinition = "LONGTEXT")
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String answer;
 
     @Enumerated(EnumType.STRING)
