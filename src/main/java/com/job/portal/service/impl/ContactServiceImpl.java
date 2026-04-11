@@ -37,7 +37,14 @@ public class ContactServiceImpl implements ContactService {
         contactRepository.save(message);
         log.info("Saved contact message to database with ID: {}", message.getId());
 
-        sendEmailNotification(request);
+        // Truly decouple email sending to ensure immediate API response
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                sendEmailNotification(request);
+            } catch (Exception e) {
+                log.error("Failed to send async email notification", e);
+            }
+        });
     }
 
     private void sendEmailNotification(ContactRequest request) {
