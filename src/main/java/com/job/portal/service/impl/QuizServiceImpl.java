@@ -2,6 +2,7 @@ package com.job.portal.service.impl;
 
 import com.job.portal.dto.QuizDto;
 import com.job.portal.entity.Quiz;
+import com.job.portal.entity.QuizQuestion;
 import com.job.portal.exception.ResourceNotFoundException;
 import com.job.portal.repository.QuizRepository;
 import com.job.portal.service.QuizService;
