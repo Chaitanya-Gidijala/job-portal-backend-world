@@ -28,6 +28,13 @@ public class QuizController {
         return new ResponseEntity<>(service.create(dto), HttpStatus.CREATED);
     }
 
+    @PostMapping("/batch")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<java.util.List<QuizDto>> createBatch(@Valid @RequestBody java.util.List<QuizDto> dtos) {
+        log.info("REST request to create Batch Quizzes: {}", dtos.size());
+        return new ResponseEntity<>(service.createBatch(dtos), HttpStatus.CREATED);
+    }
+
     @PutMapping("/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<QuizDto> update(@PathVariable Long id, @Valid @RequestBody QuizDto dto) {
@@ -66,7 +73,7 @@ public class QuizController {
 
     @GetMapping("/search")
     public ResponseEntity<Page<QuizDto>> searchByTag(
-            @RequestParam String tag,
+            @RequestParam(required = false) String tag,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         log.info("REST request to search Quizzes by tag: {}", tag);
         return ResponseEntity.ok(service.searchByTag(tag, pageable));

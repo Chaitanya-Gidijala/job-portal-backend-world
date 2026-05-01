@@ -69,6 +69,7 @@ public class TopicServiceImpl implements TopicService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     @Cacheable(value = "topics", key = "#id")
     public TopicDto getById(String id) {
         Topic entity = repository.findById(id)
@@ -77,6 +78,7 @@ public class TopicServiceImpl implements TopicService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     @Cacheable(value = "topics", key = "'all'")
     public List<TopicDto> getAll() {
         return repository.findAll().stream()

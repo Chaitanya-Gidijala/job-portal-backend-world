@@ -40,6 +40,17 @@ public class EmailAsyncService {
         sendEmail(request.getEmail(), "We received your inquiry - ChaitanyaTechWorld", userHtmlContent);
     }
 
+    @Async("taskExecutor")
+    public void sendSupportEmails(String donorName, String donorEmail, String amount, String txnId, String adminHtml, String userHtml) {
+        log.info("Starting asynchronous Brevo HTTP email process for Support contribution from: {}", donorEmail);
+        
+        // 1. Notify Admin
+        sendEmail(adminEmail, "New Support Received: ₹" + amount + " from " + donorName, adminHtml);
+        
+        // 2. Notify Donor
+        sendEmail(donorEmail, "Thank you for your support - ChaitanyaTechWorld", userHtml);
+    }
+
     private void sendEmail(String to, String subject, String htmlContent) {
         try {
             log.info("Sending Brevo HTTP email to {}...", to);

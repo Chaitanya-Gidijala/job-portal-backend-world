@@ -87,6 +87,7 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<InterviewQuestionDto> getAll(Pageable pageable) {
         log.debug("Fetching all interview questions");
         return repository.findAll(pageable)
@@ -94,24 +95,28 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<InterviewQuestionDto> getByDifficulty(InterviewQuestion.Difficulty difficulty, Pageable pageable) {
         return repository.findByDifficulty(difficulty, pageable)
                 .map(entity -> modelMapper.map(entity, InterviewQuestionDto.class));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<InterviewQuestionDto> getByJobId(Long jobId, Pageable pageable) {
         return repository.findByJobId(jobId, pageable)
                 .map(entity -> modelMapper.map(entity, InterviewQuestionDto.class));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<InterviewQuestionDto> searchByTag(String tag, Pageable pageable) {
         return repository.findByTagsContaining(tag, pageable)
                 .map(entity -> modelMapper.map(entity, InterviewQuestionDto.class));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<InterviewQuestionDto> search(String tag, InterviewQuestion.Difficulty difficulty, Pageable pageable) {
         log.info("Searching interview questions with tag: {} and difficulty: {}", tag, difficulty);
         Page<InterviewQuestion> result;

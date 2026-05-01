@@ -85,7 +85,7 @@ public class LearningResourceController {
 
     @GetMapping("/search")
     public ResponseEntity<Page<LearningResourceDto>> searchByTag(
-            @RequestParam String tag,
+            @RequestParam(required = false) String tag,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         log.info("REST request to search LearningResources by tag: {}", tag);
         return ResponseEntity.ok(service.searchByTag(tag, pageable));

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface QuizService {
     QuizDto create(QuizDto dto);
+    java.util.List<QuizDto> createBatch(java.util.List<QuizDto> dtos);
 
     QuizDto update(Long id, QuizDto dto);
 

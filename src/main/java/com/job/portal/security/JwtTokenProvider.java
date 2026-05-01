@@ -45,6 +45,10 @@ public class JwtTokenProvider {
         return getClaim(token, Claims::getExpiration);
     }
 
+    public String getEmail(String token) {
+        return getClaim(token, claims -> (String) claims.get("email"));
+    }
+
     public <T> T getClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = getAllClaims(token);
         return claimsResolver.apply(claims);

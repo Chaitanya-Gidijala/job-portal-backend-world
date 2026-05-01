@@ -56,15 +56,12 @@ public class LearningResourceServiceImpl implements LearningResourceService {
         LearningResource existing = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("LearningResource", "id", id));
 
-        log.debug("Found existing resource: {}", existing.getTitle());
-
         existing.setTitle(dto.getTitle());
         existing.setUrl(dto.getUrl());
         existing.setType(dto.getType());
         existing.setDescription(dto.getDescription());
         existing.setJobId(dto.getJobId());
 
-        // Handle tags collection safely
         if (existing.getTags() == null) {
             existing.setTags(new java.util.ArrayList<>());
         }
@@ -73,21 +70,14 @@ public class LearningResourceServiceImpl implements LearningResourceService {
             existing.getTags().addAll(dto.getTags());
         }
 
-        try {
-            LearningResource updated = repository.save(existing);
-            log.info("Successfully saved learning resource with id: {}", id);
-            return modelMapper.map(updated, LearningResourceDto.class);
-        } catch (Exception e) {
-            log.error("Error saving learning resource: {}", e.getMessage(), e);
-            throw e;
-        }
+        LearningResource updated = repository.save(existing);
+        return modelMapper.map(updated, LearningResourceDto.class);
     }
 
     @Override
     @Transactional
     @CacheEvict(value = "learning_resources", key = "#id")
     public void delete(Long id) {
-        log.info("Deleting learning resource with id: {}", id);
         if (!repository.existsById(id)) {
             throw new ResourceNotFoundException("LearningResource", "id", id);
         }
@@ -95,33 +85,37 @@ public class LearningResourceServiceImpl implements LearningResourceService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     @Cacheable(value = "learning_resources", key = "#id")
     public LearningResourceDto getById(Long id) {
-        log.info("Fetching learning resource with id: {}", id);
         LearningResource entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("LearningResource", "id", id));
         return modelMapper.map(entity, LearningResourceDto.class);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<LearningResourceDto> getAll(Pageable pageable) {
         return repository.findAll(pageable)
                 .map(entity -> modelMapper.map(entity, LearningResourceDto.class));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<LearningResourceDto> getByType(LearningResource.ResourceType type, Pageable pageable) {
         return repository.findByType(type, pageable)
                 .map(entity -> modelMapper.map(entity, LearningResourceDto.class));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<LearningResourceDto> getByJobId(Long jobId, Pageable pageable) {
         return repository.findByJobId(jobId, pageable)
                 .map(entity -> modelMapper.map(entity, LearningResourceDto.class));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<LearningResourceDto> searchByTag(String tag, Pageable pageable) {
         return repository.findByTagsContaining(tag, pageable)
                 .map(entity -> modelMapper.map(entity, LearningResourceDto.class));
