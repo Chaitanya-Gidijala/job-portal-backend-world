@@ -41,7 +41,7 @@ public class QuizServiceImpl implements QuizService {
             });
         }
         Quiz saved = repository.save(entity);
-        return modelMapper.map(saved, QuizDto.class);
+        return convertToDto(saved);
     }
 
     @Override
@@ -64,7 +64,7 @@ public class QuizServiceImpl implements QuizService {
                 .collect(Collectors.toList());
         List<Quiz> saved = repository.saveAll(entities);
         return saved.stream()
-                .map(entity -> modelMapper.map(entity, QuizDto.class))
+                .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
 
@@ -83,7 +83,7 @@ public class QuizServiceImpl implements QuizService {
         existing.setJobId(dto.getJobId());
 
         Quiz updated = repository.save(existing);
-        return modelMapper.map(updated, QuizDto.class);
+        return convertToDto(updated);
     }
 
     @Override
@@ -102,27 +102,40 @@ public class QuizServiceImpl implements QuizService {
     public QuizDto getById(Long id) {
         Quiz entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz", "id", id));
-        return modelMapper.map(entity, QuizDto.class);
+        return convertToDto(entity);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<QuizDto> getAll(Pageable pageable) {
         return repository.findAll(pageable)
-                .map(entity -> modelMapper.map(entity, QuizDto.class));
+                .map(this::convertToDto);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<QuizDto> getByJobId(Long jobId, Pageable pageable) {
         return repository.findByJobId(jobId, pageable)
-                .map(entity -> modelMapper.map(entity, QuizDto.class));
+                .map(this::convertToDto);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<QuizDto> searchByTag(String tag, Pageable pageable) {
         return repository.findByTagsContaining(tag, pageable)
-                .map(entity -> modelMapper.map(entity, QuizDto.class));
+                .map(this::convertToDto);
+    }
+
+    private QuizDto convertToDto(Quiz entity) {
+        QuizDto dto = modelMapper.map(entity, QuizDto.class);
+        if (entity.getTags() != null) {
+            dto.setTags(entity.getTags().stream().collect(Collectors.toList()));
+        }
+        if (entity.getQuestions() != null) {
+            // If the DTO has questions, we should map them too
+            // Note: This assumes QuizDto has a List<QuizQuestionDto>
+            // We just let ModelMapper handle the list element mapping but the outer collection is now initialized
+        }
+        return dto;
     }
 }

@@ -53,6 +53,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         // Public endpoints
                         .requestMatchers(HttpMethod.GET, "/api/jobs/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/topics/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/learning-resources/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/interview-questions/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/quizzes/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/contact/**").permitAll()
                         .requestMatchers("/api/payments/**").permitAll()

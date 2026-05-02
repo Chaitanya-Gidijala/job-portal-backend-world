@@ -32,7 +32,7 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
         log.info("Creating interview question: {}", dto.getQuestion());
         InterviewQuestion entity = modelMapper.map(dto, InterviewQuestion.class);
         InterviewQuestion saved = repository.save(entity);
-        return modelMapper.map(saved, InterviewQuestionDto.class);
+        return convertToDto(saved);
     }
 
     @Override
@@ -44,7 +44,7 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
                 .collect(Collectors.toList());
         List<InterviewQuestion> saved = repository.saveAll(entities);
         return saved.stream()
-                .map(entity -> modelMapper.map(entity, InterviewQuestionDto.class))
+                .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
 
@@ -63,7 +63,7 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
         existing.setJobId(dto.getJobId());
 
         InterviewQuestion updated = repository.save(existing);
-        return modelMapper.map(updated, InterviewQuestionDto.class);
+        return convertToDto(updated);
     }
 
     @Override
@@ -78,12 +78,13 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     @Cacheable(value = "interview_questions", key = "#id")
     public InterviewQuestionDto getById(Long id) {
         log.info("Fetching interview question with id: {}", id);
         InterviewQuestion entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("InterviewQuestion", "id", id));
-        return modelMapper.map(entity, InterviewQuestionDto.class);
+        return convertToDto(entity);
     }
 
     @Override
@@ -131,6 +132,14 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
             result = repository.findAll(pageable);
         }
 
-        return result.map(entity -> modelMapper.map(entity, InterviewQuestionDto.class));
+        return result.map(this::convertToDto);
+    }
+
+    private InterviewQuestionDto convertToDto(InterviewQuestion entity) {
+        InterviewQuestionDto dto = modelMapper.map(entity, InterviewQuestionDto.class);
+        if (entity.getTags() != null) {
+            dto.setTags(entity.getTags().stream().collect(Collectors.toList()));
+        }
+        return dto;
     }
 }
