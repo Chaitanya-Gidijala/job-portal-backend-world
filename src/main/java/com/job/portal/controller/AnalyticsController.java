@@ -3,17 +3,20 @@ package com.job.portal.controller;
 import com.job.portal.dto.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.HashMap;
+import java.time.LocalDateTime;
 
 import com.job.portal.entity.DailyAnalytics;
+import com.job.portal.entity.VisitorSession;
 import com.job.portal.repository.DailyAnalyticsRepository;
+import com.job.portal.repository.VisitorSessionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/analytics")
@@ -23,10 +26,8 @@ public class AnalyticsController {
     @Autowired
     private DailyAnalyticsRepository analyticsRepository;
 
-    private final AtomicLong totalViews = new AtomicLong(0);
-    private final AtomicLong uniqueVisitors = new AtomicLong(0);
-    private final AtomicLong totalLogins = new AtomicLong(0);
-    private final Map<String, AtomicLong> browserStats = new ConcurrentHashMap<>();
+    @Autowired
+    private VisitorSessionRepository visitorSessionRepository;
 
     private DailyAnalytics getOrCreateToday() {
         LocalDate today = LocalDate.now();
@@ -40,42 +41,51 @@ public class AnalyticsController {
     }
 
     @PostMapping("/visit")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> visit(@RequestBody(required = false) Map<String, String> metadata) {
-        long count = totalViews.incrementAndGet();
-        
+    public ResponseEntity<ApiResponse<Map<String, Object>>> visit(@RequestBody(required = false) Map<String, String> metadata, HttpServletRequest request) {
         DailyAnalytics today = getOrCreateToday();
         today.setTotalViews(today.getTotalViews() + 1);
 
+        // Simple unique visitor logic based on probability for demo (ideally IP/cookie based)
         if (Math.random() > 0.3) {
-            uniqueVisitors.incrementAndGet();
             today.setUniqueVisitors(today.getUniqueVisitors() + 1);
         }
 
-        if (metadata != null) {
-            String browser = metadata.get("browser");
-            if (browser != null) {
-                browserStats.computeIfAbsent(browser, k -> new AtomicLong(0)).incrementAndGet();
-            }
-        }
-        
         analyticsRepository.save(today);
 
+        // Save detailed visitor session
+        if (metadata != null) {
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip == null) ip = request.getRemoteAddr();
+
+            VisitorSession session = VisitorSession.builder()
+                    .page(metadata.get("page"))
+                    .browser(metadata.get("browser"))
+                    .os(metadata.get("os"))
+                    .device(metadata.get("device"))
+                    .language(metadata.get("language"))
+                    .referrer(metadata.get("referrer"))
+                    .userEmail(metadata.get("userEmail"))
+                    .systemInfo(metadata.get("systemInfo"))
+                    .ipAddress(ip)
+                    .timestamp(LocalDateTime.now())
+                    .build();
+            visitorSessionRepository.save(session);
+        }
+
         Map<String, Object> data = new HashMap<>();
-        data.put("count", count);
+        data.put("count", today.getTotalViews());
         
         return ResponseEntity.ok(ApiResponse.success("Visit recorded successfully", data));
     }
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<Map<String, Object>>> recordLogin() {
-        totalLogins.incrementAndGet();
-        
         DailyAnalytics today = getOrCreateToday();
         today.setUserLogins(today.getUserLogins() + 1);
         analyticsRepository.save(today);
 
         Map<String, Object> data = new HashMap<>();
-        data.put("logins", totalLogins.get());
+        data.put("logins", today.getUserLogins());
         
         return ResponseEntity.ok(ApiResponse.success("Login recorded successfully", data));
     }
@@ -84,23 +94,39 @@ public class AnalyticsController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> getStats() {
         Map<String, Object> data = new HashMap<>();
         
-        // Return historical daily data for the graph
-        List<DailyAnalytics> historicalData = analyticsRepository.findTop30ByOrderByDateIdDesc();
+        List<DailyAnalytics> allData = analyticsRepository.findAll();
+        
+        // Return historical daily data for the graph (last 30 days)
+        List<DailyAnalytics> historicalData = allData.stream()
+            .sorted((a, b) -> b.getDateId().compareTo(a.getDateId()))
+            .limit(30)
+            .collect(Collectors.toList());
         historicalData.sort((a, b) -> a.getDateId().compareTo(b.getDateId()));
         data.put("dailyStats", historicalData);
         
-        long sumViews = historicalData.stream().mapToLong(DailyAnalytics::getTotalViews).sum() + totalViews.get();
-        long sumUnique = historicalData.stream().mapToLong(DailyAnalytics::getUniqueVisitors).sum() + uniqueVisitors.get();
-        long sumLogins = historicalData.stream().mapToLong(DailyAnalytics::getUserLogins).sum() + totalLogins.get();
+        // Total aggregations purely from DB
+        long sumViews = allData.stream().mapToLong(DailyAnalytics::getTotalViews).sum();
+        long sumUnique = allData.stream().mapToLong(DailyAnalytics::getUniqueVisitors).sum();
+        long sumLogins = allData.stream().mapToLong(DailyAnalytics::getUserLogins).sum();
 
         data.put("totalViews", sumViews);
         data.put("uniqueVisitors", sumUnique);
         data.put("totalLogins", sumLogins);
         
-        Map<String, Long> bStats = new HashMap<>();
-        browserStats.forEach((k, v) -> bStats.put(k, v.get()));
+        // Calculate browser distribution dynamically from last 1000 sessions
+        List<VisitorSession> recentSessions = visitorSessionRepository.findTop50ByOrderByTimestampDesc();
+        Map<String, Long> bStats = recentSessions.stream()
+            .filter(s -> s.getBrowser() != null)
+            .collect(Collectors.groupingBy(VisitorSession::getBrowser, Collectors.counting()));
         data.put("browserStats", bStats);
 
         return ResponseEntity.ok(ApiResponse.success("Analytics fetched successfully", data));
     }
+
+    @GetMapping("/sessions")
+    public ResponseEntity<ApiResponse<List<VisitorSession>>> getSessions(@RequestParam(defaultValue = "50") int limit) {
+        List<VisitorSession> sessions = visitorSessionRepository.findTop50ByOrderByTimestampDesc();
+        return ResponseEntity.ok(ApiResponse.success("Sessions fetched successfully", sessions));
+    }
 }
+
