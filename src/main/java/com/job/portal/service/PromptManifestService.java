@@ -19,8 +19,8 @@ import java.util.stream.Collectors;
  * Service that stores prompts in a `prompts.json` manifest file on GitHub
  * instead of a relational database.
  */
-@Service
-@Primary
+// @Service
+// @Primary
 @Slf4j
 public class PromptManifestService implements PromptService {
 
