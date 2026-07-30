@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Sort;
 
 @Service
 public class PromptServiceImpl implements PromptService {
@@ -21,7 +22,7 @@ public class PromptServiceImpl implements PromptService {
 
     @Override
     public List<PromptDTO> getAllPrompts() {
-        return promptRepository.findAll().stream()
+        return promptRepository.findAll(Sort.by(Sort.Direction.DESC, "id")).stream()
                 .map(prompt -> modelMapper.map(prompt, PromptDTO.class))
                 .collect(Collectors.toList());
     }

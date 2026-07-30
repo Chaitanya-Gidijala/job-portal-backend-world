@@ -47,7 +47,9 @@ public class PromptManifestService implements PromptService {
 
     @Override
     public List<PromptDTO> getAllPrompts() {
-        return readManifest().getPrompts();
+        List<PromptDTO> prompts = readManifest().getPrompts();
+        prompts.sort((p1, p2) -> p2.getId().compareTo(p1.getId()));
+        return prompts;
     }
 
     @Override
