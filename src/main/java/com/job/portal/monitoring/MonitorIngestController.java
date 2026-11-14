@@ -71,6 +71,7 @@ public class MonitorIngestController {
         GeoIpService.Geo g = geo.cached(ip);
         PresenceService.LiveSession session = presence.get(sessionId);
         String username = session == null ? null : session.getUsername();
+        String email = session == null ? null : session.getEmail();
 
         int accepted = 0;
         for (JsonNode ev : n.get("events")) {
@@ -96,6 +97,7 @@ public class MonitorIngestController {
                     .detail(ClientInfo.truncate(text(ev, "detail"), 1000))
                     .ip(ip)
                     .username(username)
+                    .userEmail(email)
                     .visitorId(ClientInfo.truncate(visitorId, 64))
                     .sessionId(ClientInfo.truncate(sessionId, 64))
                     .userAgent(ClientInfo.truncate(ua, 400))

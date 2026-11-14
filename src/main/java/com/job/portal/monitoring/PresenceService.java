@@ -35,6 +35,7 @@ public class PresenceService {
         private String sessionId;
         private String visitorId;
         private String username;
+        private String email;
         private String ip;
         private String userAgent;
         private String browser;

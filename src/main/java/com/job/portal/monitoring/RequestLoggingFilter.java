@@ -32,7 +32,12 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     private final PresenceService presence;
     private final GeoIpService geo;
     private final JwtTokenProvider jwt;
-    private final Map<String, String> tokenUsers = new ConcurrentHashMap<>();
+    /** Verified identity from a JWT; empty username = invalid token. */
+    record Identity(String username, String email) {
+        static final Identity NONE = new Identity("", null);
+    }
+
+    private final Map<String, Identity> tokenUsers = new ConcurrentHashMap<>();
 
     public RequestLoggingFilter(MonitoringHub hub, PresenceService presence, GeoIpService geo, JwtTokenProvider jwt) {
         this.hub = hub;
@@ -72,11 +77,18 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         boolean heartbeat = path.startsWith("/api/monitor/");
 
         PresenceService.LiveSession session = presence.findByClient(ip, ua);
-        String username = userFrom(request.getHeader("Authorization"));
+        Identity id = identity(request.getHeader("Authorization"));
+        String username = id == null ? null : id.username();
+        String email = id == null ? null : id.email();
         if (session != null) {
             // Verified identity (from a valid JWT) sticks to the visitor's live session.
-            if (username != null) session.setUsername(username);
-            else username = session.getUsername();
+            if (username != null) {
+                session.setUsername(username);
+                session.setEmail(email);
+            } else {
+                username = session.getUsername();
+                email = session.getEmail();
+            }
         }
 
         GeoIpService.Geo g = geo.cached(ip);
@@ -92,6 +104,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                 .durationMs(durationMs)
                 .ip(ip)
                 .username(username)
+                .userEmail(email)
                 .visitorId(session == null ? null : session.getVisitorId())
                 .sessionId(session == null ? null : session.getSessionId())
                 .userAgent(ua)
@@ -105,22 +118,30 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                 .build());
     }
 
-    /** Username from a Bearer token (cached per token; invalid tokens are remembered as anonymous). */
-    private String userFrom(String header) {
+    /** Identity from a Bearer token (cached per token; invalid tokens are remembered as anonymous). */
+    private Identity identity(String header) {
         if (header == null || !header.startsWith("Bearer ")) return null;
         String token = header.substring(7).trim();
         if (token.isEmpty() || "null".equals(token)) return null;
-        String cached = tokenUsers.get(token);
-        if (cached != null) return cached.isEmpty() ? null : cached;
-        String user = "";
+        Identity cached = tokenUsers.get(token);
+        if (cached != null) return cached == Identity.NONE ? null : cached;
+        Identity found = Identity.NONE;
         try {
-            if (jwt.validateToken(token)) user = jwt.getUsername(token);
+            if (jwt.validateToken(token)) {
+                String email = null;
+                try {
+                    email = jwt.getEmail(token);
+                } catch (RuntimeException ignored) {
+                    // token without an email claim
+                }
+                found = new Identity(jwt.getUsername(token), email);
+            }
         } catch (RuntimeException ignored) {
             // invalid / expired token
         }
         if (tokenUsers.size() > TOKEN_CACHE_MAX) tokenUsers.clear();
-        tokenUsers.put(token, user);
-        return user.isEmpty() ? null : user;
+        tokenUsers.put(token, found);
+        return found == Identity.NONE ? null : found;
     }
 
     /** Never store secrets that arrive in query strings (stream tickets, tokens, passwords). */

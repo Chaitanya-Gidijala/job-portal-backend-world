@@ -28,6 +28,11 @@ public class MonitorLogWriter {
     private final ConcurrentLinkedQueue<LogEntry> queue = new ConcurrentLinkedQueue<>();
     private final AtomicInteger size = new AtomicInteger();
     private final AtomicInteger dropped = new AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicLong written = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong droppedTotal = new java.util.concurrent.atomic.AtomicLong();
+    private volatile long lastSuccessAt;
+    private volatile long lastErrorAt;
+    private volatile String lastError;
 
     public MonitorLogWriter(MonitorLogRepository repository,
                             @Value("${monitor.retention-days:14}") int retentionDays) {
@@ -38,6 +43,7 @@ public class MonitorLogWriter {
     public void enqueue(LogEntry entry) {
         if (size.get() >= MAX_QUEUE) {
             dropped.incrementAndGet(); // DB is down or slow — keep memory bounded
+            droppedTotal.incrementAndGet();
             return;
         }
         queue.add(entry);
@@ -58,8 +64,13 @@ public class MonitorLogWriter {
             }
             try {
                 repository.saveAll(batch);
+                written.addAndGet(batch.size());
+                lastSuccessAt = System.currentTimeMillis();
             } catch (RuntimeException ex) {
-                log.warn("Could not persist {} monitor logs: {}", batch.size(), ex.getMessage());
+                lastErrorAt = System.currentTimeMillis();
+                lastError = rootMessage(ex);
+                droppedTotal.addAndGet(batch.size());
+                log.warn("Could not persist {} monitor logs: {}", batch.size(), lastError);
                 return;
             }
         }
@@ -77,5 +88,26 @@ public class MonitorLogWriter {
 
     public int pending() {
         return size.get();
+    }
+
+    /** Health of the persistence pipeline, shown on the admin Health page. */
+    public java.util.Map<String, Object> status() {
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("pending", size.get());
+        m.put("written", written.get());
+        m.put("dropped", droppedTotal.get());
+        m.put("lastSuccessAt", lastSuccessAt == 0 ? null : lastSuccessAt);
+        m.put("lastErrorAt", lastErrorAt == 0 ? null : lastErrorAt);
+        m.put("lastError", lastError);
+        m.put("healthy", lastErrorAt == 0 || lastSuccessAt > lastErrorAt);
+        m.put("retentionDays", retentionDays);
+        return m;
+    }
+
+    static String rootMessage(Throwable t) {
+        Throwable root = t;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        String msg = root.getMessage();
+        return ClientInfo.truncate(root.getClass().getSimpleName() + (msg == null ? "" : ": " + msg), 400);
     }
 }

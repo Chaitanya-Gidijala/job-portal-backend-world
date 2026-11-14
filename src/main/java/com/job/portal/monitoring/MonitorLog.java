@@ -55,6 +55,9 @@ public class MonitorLog {
     @Column(length = 120)
     private String username;
 
+    @Column(name = "user_email", length = 160)
+    private String userEmail;
+
     @Column(name = "visitor_id", length = 64)
     private String visitorId;
 

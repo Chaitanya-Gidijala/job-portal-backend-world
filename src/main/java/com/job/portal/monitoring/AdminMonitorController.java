@@ -44,10 +44,14 @@ public class AdminMonitorController {
     private final ContactRepository contacts;
     private final DailyChallengeService daily;
     private final MonitorLogWriter writer;
+    private final TrafficStatsService traffic;
+    private final GeoIpService geo;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public AdminMonitorController(MonitoringHub hub, PresenceService presence, SystemHealthService health,
                                   MonitorLogRepository logs, DailyAnalyticsRepository analytics,
-                                  ContactRepository contacts, DailyChallengeService daily, MonitorLogWriter writer) {
+                                  ContactRepository contacts, DailyChallengeService daily, MonitorLogWriter writer,
+                                  TrafficStatsService traffic, GeoIpService geo, org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.hub = hub;
         this.presence = presence;
         this.health = health;
@@ -56,6 +60,9 @@ public class AdminMonitorController {
         this.contacts = contacts;
         this.daily = daily;
         this.writer = writer;
+        this.traffic = traffic;
+        this.geo = geo;
+        this.jdbc = jdbc;
     }
 
     @PostConstruct
@@ -83,7 +90,6 @@ public class AdminMonitorController {
         Map<String, Object> out = new LinkedHashMap<>();
         Map<String, String> errors = new LinkedHashMap<>();
         LocalDate today = LocalDate.now();
-        Instant since = Instant.now().minus(Duration.ofDays(1));
 
         section(out, errors, "live", presence::breakdown);
         section(out, errors, "metrics", () -> hub.metrics(60));
@@ -98,9 +104,12 @@ public class AdminMonitorController {
             return rows;
         });
         section(out, errors, "allTimeViews", analytics::sumTotalViews);
-        section(out, errors, "topPages24h", () -> pairs(logs.topPages(since, PageRequest.of(0, 10))));
-        section(out, errors, "topCountries24h", () -> pairs(logs.topCountries(since, PageRequest.of(0, 10))));
-        section(out, errors, "topEndpoints", () -> hub.topEndpoints(10));
+        section(out, errors, "traffic24h", traffic::last24h);
+        section(out, errors, "endpoints", () -> hub.endpointPerformance(12));
+        section(out, errors, "uptime", () -> {
+            var rt = java.lang.management.ManagementFactory.getRuntimeMXBean();
+            return Map.of("startedAt", rt.getStartTime(), "uptimeMs", rt.getUptime());
+        });
         section(out, errors, "dailyChallenge", () -> daily.stats(daily.currentDay()));
         section(out, errors, "inquiries", () -> Map.of("total", contacts.count(), "unread", contacts.countUnread()));
         if (!out.containsKey("today")) {
@@ -169,6 +178,7 @@ public class AdminMonitorController {
                         cb.like(cb.lower(root.get("path")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("label"), "")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("username"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("userEmail"), "")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("ip"), "")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("country"), "")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("city"), "")), like),
@@ -198,6 +208,9 @@ public class AdminMonitorController {
                 "liveStreams", hub.streamCount(),
                 "pendingWrites", writer.pending(),
                 "liveSessions", presence.liveCount()));
+        out.put("pipeline", writer.status());
+        out.put("geo", geo.status());
+        out.put("tables", tables());
         return ApiResponse.success("Health", out);
     }
 
@@ -230,7 +243,24 @@ public class AdminMonitorController {
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Not found", null)));
     }
 
-    private static List<Map<String, Object>> pairs(List<Object[]> rows) {
-        return rows.stream().map(r -> Map.<String, Object>of("name", String.valueOf(r[0]), "count", r[1])).toList();
+    static final List<String> TABLES = List.of("monitor_logs", "monitor_visitor_days", "daily_challenge_results",
+            "daily_analytics", "contact_messages");
+
+    /** Existence + row count of the tables the dashboard depends on (catches missing schema at a glance). */
+    private List<Map<String, Object>> tables() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (String t : TABLES) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", t);
+            try {
+                m.put("rows", jdbc.queryForObject("select count(*) from " + t, Long.class));
+                m.put("ok", true);
+            } catch (RuntimeException e) {
+                m.put("ok", false);
+                m.put("error", MonitorLogWriter.rootMessage(e));
+            }
+            out.add(m);
+        }
+        return out;
     }
 }

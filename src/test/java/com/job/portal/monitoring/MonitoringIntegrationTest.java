@@ -85,6 +85,8 @@ class MonitoringIntegrationTest {
                 as(token("bob", List.of("ROLE_USER"))), String.class).getStatusCode());
         assertEquals(HttpStatus.OK, adminGet("/api/admin/monitor/overview").getStatusCode());
         assertEquals(HttpStatus.OK, adminGet("/api/admin/monitor/health").getStatusCode());
+        // Unknown endpoints are 404, not 500 (they used to inflate the server error rate).
+        assertEquals(HttpStatus.NOT_FOUND, adminGet("/api/does-not-exist").getStatusCode());
     }
 
     /** Production regression: legacy rows with NULL counters/flags made the overview return 500. */

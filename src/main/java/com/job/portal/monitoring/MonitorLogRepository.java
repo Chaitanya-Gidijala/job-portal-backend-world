@@ -20,13 +20,8 @@ public interface MonitorLogRepository extends JpaRepository<MonitorLog, Long>, J
     @Query("delete from MonitorLog l where l.createdAt < :cutoff")
     int deleteOlderThan(@Param("cutoff") Instant cutoff);
 
-    /** [path, count] — most requested pages via client page views since a point in time. */
-    @Query("select l.path, count(l) from MonitorLog l where l.kind = 'PAGEVIEW' and l.createdAt >= :since "
-            + "group by l.path order by count(l) desc")
-    List<Object[]> topPages(@Param("since") Instant since, Pageable pageable);
-
-    /** [country, count] — page views by country since a point in time. */
-    @Query("select coalesce(l.country, 'Unknown'), count(l) from MonitorLog l where l.kind = 'PAGEVIEW' "
-            + "and l.createdAt >= :since group by l.country order by count(l) desc")
-    List<Object[]> topCountries(@Param("since") Instant since, Pageable pageable);
+    /** Lightweight tuples for the 24h analytics (grouped in Java, dialect-independent). */
+    @Query("select l.kind, l.status, l.createdAt, l.visitorId, l.sessionId, l.device, l.browser, l.os, l.country, l.path "
+            + "from MonitorLog l where l.createdAt >= :since and l.kind in ('PAGEVIEW', 'REQUEST', 'ERROR')")
+    List<Object[]> statsRows(@Param("since") Instant since, Pageable pageable);
 }

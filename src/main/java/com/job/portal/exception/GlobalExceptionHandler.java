@@ -63,6 +63,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.noContent().build();
     }
 
+    // Unknown URLs (bots, typos) are 404s — not server errors that inflate the error rate
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<com.job.portal.dto.ApiResponse<Void>> handleNoResource(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        return new ResponseEntity<>(com.job.portal.dto.ApiResponse.error("Not found", null), HttpStatus.NOT_FOUND);
+    }
+
     // Handle all other exceptions — logged with the stack trace so production failures are diagnosable
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleGenericException(Exception ex) {

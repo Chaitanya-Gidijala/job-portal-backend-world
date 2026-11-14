@@ -30,6 +30,7 @@ public class LogEntry {
     private Long durationMs;
     private String ip;
     private String username;
+    private String userEmail;
     private String visitorId;
     private String sessionId;
     private String userAgent;
@@ -53,6 +54,7 @@ public class LogEntry {
                 .durationMs(durationMs)
                 .ip(ip)
                 .username(ClientInfo.truncate(username, 120))
+                .userEmail(ClientInfo.truncate(userEmail, 160))
                 .visitorId(ClientInfo.truncate(visitorId, 64))
                 .sessionId(ClientInfo.truncate(sessionId, 64))
                 .userAgent(ClientInfo.truncate(userAgent, 400))

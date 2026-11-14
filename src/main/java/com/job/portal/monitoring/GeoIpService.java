@@ -55,6 +55,9 @@ public class GeoIpService {
     });
     private final AtomicLong windowStart = new AtomicLong(System.currentTimeMillis());
     private final AtomicInteger windowCount = new AtomicInteger();
+    private final AtomicLong lookups = new AtomicLong();
+    private final AtomicLong failures = new AtomicLong();
+    private final AtomicLong rateLimited = new AtomicLong();
 
     public GeoIpService(RestTemplate restTemplate,
                         @Value("${monitor.geoip.enabled:true}") boolean enabled,
@@ -118,11 +121,14 @@ public class GeoIpService {
     @SuppressWarnings("unchecked")
     private Geo fetch(String ip) {
         if (!allowRequest()) {
+            rateLimited.incrementAndGet();
             return null; // retried on the next request from this IP
         }
+        lookups.incrementAndGet();
         try {
             Map<String, Object> body = restTemplate.getForObject(urlTemplate.replace("{ip}", ip), Map.class);
             if (body == null || !"success".equals(body.get("status"))) {
+                failures.incrementAndGet();
                 return Geo.UNKNOWN;
             }
             return new Geo(
@@ -134,9 +140,20 @@ public class GeoIpService {
                     body.get("lon") instanceof Number n ? n.doubleValue() : null,
                     (String) body.get("isp"));
         } catch (RuntimeException e) {
+            failures.incrementAndGet();
             log.debug("GeoIP lookup failed for {}: {}", ip, e.getMessage());
             return null;
         }
+    }
+
+    public Map<String, Object> status() {
+        return Map.of(
+                "enabled", enabled,
+                "cachedIps", cache.estimatedSize(),
+                "lookups", lookups.get(),
+                "failures", failures.get(),
+                "rateLimited", rateLimited.get(),
+                "perMinuteLimit", perMinute);
     }
 
     static boolean isPrivate(String ip) {

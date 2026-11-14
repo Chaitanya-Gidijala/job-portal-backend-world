@@ -54,7 +54,17 @@ public class MonitoringHub {
 
     private final Map<Long, Bucket> buckets = new ConcurrentHashMap<>();
     private final ConcurrentLinkedDeque<long[]> latencies = new ConcurrentLinkedDeque<>();
-    private final Map<String, AtomicLong> endpointHits = new ConcurrentHashMap<>();
+    /** Per-endpoint counters + recent latency samples (since the API started). */
+    private static final class EndpointStat {
+        final AtomicLong hits = new AtomicLong();
+        final AtomicLong serverErrors = new AtomicLong();
+        final AtomicLong clientErrors = new AtomicLong();
+        final AtomicLong totalMs = new AtomicLong();
+        final ConcurrentLinkedDeque<Long> samples = new ConcurrentLinkedDeque<>();
+        volatile long lastAt;
+    }
+
+    private final Map<String, EndpointStat> endpoints = new ConcurrentHashMap<>();
     private final Map<String, ConcurrentLinkedDeque<Double>> vitals = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> appVersions = new ConcurrentHashMap<>();
     private final Deque<LogEntry> recentErrors = new ArrayDeque<>();
@@ -102,7 +112,16 @@ public class MonitoringHub {
                 else if (status >= 400) b.clientErrors.incrementAndGet();
                 latencies.addLast(new long[]{e.getTs(), ms});
                 if (latencies.size() > 50_000) latencies.pollFirst();
-                endpointHits.computeIfAbsent(e.getMethod() + " " + normalize(e.getPath()), k -> new AtomicLong()).incrementAndGet();
+                if (endpoints.size() < 2_000 || endpoints.containsKey(e.getMethod() + " " + normalize(e.getPath()))) {
+                    EndpointStat st = endpoints.computeIfAbsent(e.getMethod() + " " + normalize(e.getPath()), k -> new EndpointStat());
+                    st.hits.incrementAndGet();
+                    st.totalMs.addAndGet(ms);
+                    if (status >= 500) st.serverErrors.incrementAndGet();
+                    else if (status >= 400) st.clientErrors.incrementAndGet();
+                    st.samples.addLast(ms);
+                    if (st.samples.size() > 200) st.samples.pollFirst();
+                    st.lastAt = e.getTs();
+                }
                 if (status >= 500) remember(e);
             }
             case LogEntry.PAGEVIEW -> b.pageViews.incrementAndGet();
@@ -196,10 +215,33 @@ public class MonitoringHub {
     }
 
     public List<Map<String, Object>> topEndpoints(int limit) {
-        return endpointHits.entrySet().stream()
-                .sorted((a, b) -> Long.compare(b.getValue().get(), a.getValue().get()))
+        return endpoints.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue().hits.get(), a.getValue().hits.get()))
                 .limit(limit)
-                .map(e -> Map.<String, Object>of("endpoint", e.getKey(), "count", e.getValue().get()))
+                .map(e -> Map.<String, Object>of("endpoint", e.getKey(), "count", e.getValue().hits.get()))
+                .toList();
+    }
+
+    /** Endpoint performance table: hits, error counts, avg and p95 latency. */
+    public List<Map<String, Object>> endpointPerformance(int limit) {
+        return endpoints.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue().hits.get(), a.getValue().hits.get()))
+                .limit(limit)
+                .map(e -> {
+                    EndpointStat st = e.getValue();
+                    long[] sorted = st.samples.stream().mapToLong(Long::longValue).sorted().toArray();
+                    long hits = st.hits.get();
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("endpoint", e.getKey());
+                    m.put("hits", hits);
+                    m.put("serverErrors", st.serverErrors.get());
+                    m.put("clientErrors", st.clientErrors.get());
+                    m.put("errorRate", hits == 0 ? 0 : Math.round(st.serverErrors.get() * 1000.0 / hits) / 10.0);
+                    m.put("avgMs", hits == 0 ? 0 : st.totalMs.get() / hits);
+                    m.put("p95Ms", percentile(sorted, 0.95));
+                    m.put("lastAt", st.lastAt);
+                    return m;
+                })
                 .toList();
     }
 
