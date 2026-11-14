@@ -34,9 +34,9 @@ public class AnalyticsController {
         return analyticsRepository.findById(today)
                 .orElseGet(() -> DailyAnalytics.builder()
                         .dateId(today)
-                        .totalViews(0)
-                        .uniqueVisitors(0)
-                        .userLogins(0)
+                        .totalViews(0L)
+                        .uniqueVisitors(0L)
+                        .userLogins(0L)
                         .build());
     }
 

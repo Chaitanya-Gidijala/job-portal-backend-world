@@ -63,9 +63,10 @@ public class GlobalExceptionHandler {
         return ResponseEntity.noContent().build();
     }
 
-    // Handle all other exceptions
+    // Handle all other exceptions — logged with the stack trace so production failures are diagnosable
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleGenericException(Exception ex) {
+        org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class).error("Unhandled exception", ex);
         return new ResponseEntity<>(ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

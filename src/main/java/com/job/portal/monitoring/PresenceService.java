@@ -238,7 +238,7 @@ public class PresenceService {
         }
         try {
             DailyAnalytics row = analyticsRepository.findById(today).orElseGet(() -> DailyAnalytics.builder()
-                    .dateId(today).totalViews(0).uniqueVisitors(0).userLogins(0).build());
+                    .dateId(today).totalViews(0L).uniqueVisitors(0L).userLogins(0L).build());
             row.setTotalViews(row.getTotalViews() + views);
             row.setUniqueVisitors(row.getUniqueVisitors() + uniques);
             analyticsRepository.save(row);

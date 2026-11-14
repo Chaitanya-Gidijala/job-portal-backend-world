@@ -51,6 +51,9 @@ class MonitoringIntegrationTest {
     @Autowired
     PresenceService presence;
 
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     private String url(String path) {
         return "http://localhost:" + port + path;
     }
@@ -82,6 +85,21 @@ class MonitoringIntegrationTest {
                 as(token("bob", List.of("ROLE_USER"))), String.class).getStatusCode());
         assertEquals(HttpStatus.OK, adminGet("/api/admin/monitor/overview").getStatusCode());
         assertEquals(HttpStatus.OK, adminGet("/api/admin/monitor/health").getStatusCode());
+    }
+
+    /** Production regression: legacy rows with NULL counters/flags made the overview return 500. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void overviewToleratesLegacyNullColumns() {
+        jdbc.update("insert into daily_analytics (date_id, total_views, unique_visitors, user_logins) values (DATEADD('DAY', -400, CURRENT_DATE), 7, NULL, NULL)");
+        jdbc.update("insert into contact_messages (name, email, message, created_at, is_read) values ('Legacy', 'l@example.com', 'hi', CURRENT_TIMESTAMP, NULL)");
+
+        ResponseEntity<Map> res = adminGet("/api/admin/monitor/overview");
+        assertEquals(HttpStatus.OK, res.getStatusCode());
+        Map<String, Object> data = (Map<String, Object>) res.getBody().get("data");
+        assertTrue(((Map<?, ?>) data.get("errors")).isEmpty(), () -> "section errors: " + data.get("errors"));
+        assertTrue(((Number) ((Map<?, ?>) data.get("inquiries")).get("unread")).longValue() >= 1);
+        assertTrue(((Number) data.get("allTimeViews")).longValue() >= 7);
     }
 
     @Test

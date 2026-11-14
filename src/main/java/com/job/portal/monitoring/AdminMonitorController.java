@@ -25,11 +25,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.function.Supplier;
 
 /**
  * Admin monitoring API (ROLE_ADMIN, enforced in SecurityConfig). The live stream
  * is authenticated with a one-time ticket obtained from {@code POST /stream-ticket}.
  */
+@lombok.extern.slf4j.Slf4j
 @RestController
 @RequestMapping("/api/admin/monitor")
 public class AdminMonitorController {
@@ -77,31 +79,44 @@ public class AdminMonitorController {
 
     @GetMapping("/overview")
     public ApiResponse<Map<String, Object>> overview() {
-        LocalDate today = LocalDate.now();
-        List<DailyAnalytics> last30 = analytics.findTop30ByOrderByDateIdDesc();
-        List<DailyAnalytics> series = new ArrayList<>(last30);
-        series.sort(Comparator.comparing(DailyAnalytics::getDateId));
-        DailyAnalytics todayRow = last30.stream().filter(d -> d.getDateId().equals(today)).findFirst().orElse(null);
-
-        List<ContactMessage> all = contacts.findAll();
-        long unread = all.stream().filter(c -> !c.isRead()).count();
-
-        Instant since = Instant.now().minus(Duration.ofDays(1));
+        // Each section is independent: one failing query must not blank the whole dashboard.
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("live", presence.breakdown());
-        out.put("metrics", hub.metrics(60));
-        out.put("today", Map.of(
-                "views", todayRow == null ? 0 : todayRow.getTotalViews(),
-                "uniqueVisitors", todayRow == null ? 0 : todayRow.getUniqueVisitors(),
-                "peakConcurrent", presence.peakToday()));
-        out.put("daily30", series);
-        out.put("allTimeViews", analytics.findAll().stream().mapToLong(DailyAnalytics::getTotalViews).sum());
-        out.put("topPages24h", pairs(logs.topPages(since, PageRequest.of(0, 10))));
-        out.put("topCountries24h", pairs(logs.topCountries(since, PageRequest.of(0, 10))));
-        out.put("topEndpoints", hub.topEndpoints(10));
-        out.put("dailyChallenge", daily.stats(daily.currentDay()));
-        out.put("inquiries", Map.of("total", all.size(), "unread", unread));
-        return ApiResponse.success("Overview", out);
+        Map<String, String> errors = new LinkedHashMap<>();
+        LocalDate today = LocalDate.now();
+        Instant since = Instant.now().minus(Duration.ofDays(1));
+
+        section(out, errors, "live", presence::breakdown);
+        section(out, errors, "metrics", () -> hub.metrics(60));
+        section(out, errors, "daily30", () -> {
+            List<DailyAnalytics> rows = new ArrayList<>(analytics.findTop30ByOrderByDateIdDesc());
+            rows.sort(Comparator.comparing(DailyAnalytics::getDateId));
+            DailyAnalytics todayRow = rows.stream().filter(d -> today.equals(d.getDateId())).findFirst().orElse(null);
+            out.put("today", Map.of(
+                    "views", todayRow == null ? 0L : todayRow.getTotalViews(),
+                    "uniqueVisitors", todayRow == null ? 0L : todayRow.getUniqueVisitors(),
+                    "peakConcurrent", presence.peakToday()));
+            return rows;
+        });
+        section(out, errors, "allTimeViews", analytics::sumTotalViews);
+        section(out, errors, "topPages24h", () -> pairs(logs.topPages(since, PageRequest.of(0, 10))));
+        section(out, errors, "topCountries24h", () -> pairs(logs.topCountries(since, PageRequest.of(0, 10))));
+        section(out, errors, "topEndpoints", () -> hub.topEndpoints(10));
+        section(out, errors, "dailyChallenge", () -> daily.stats(daily.currentDay()));
+        section(out, errors, "inquiries", () -> Map.of("total", contacts.count(), "unread", contacts.countUnread()));
+        if (!out.containsKey("today")) {
+            out.put("today", Map.of("views", 0L, "uniqueVisitors", 0L, "peakConcurrent", presence.peakToday()));
+        }
+        out.put("errors", errors);
+        return ApiResponse.success(errors.isEmpty() ? "Overview" : "Overview (partial)", out);
+    }
+
+    private void section(Map<String, Object> out, Map<String, String> errors, String key, Supplier<Object> supplier) {
+        try {
+            out.put(key, supplier.get());
+        } catch (RuntimeException e) {
+            log.error("Admin overview section '{}' failed", key, e);
+            errors.put(key, e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
     }
 
     @GetMapping("/visitors")

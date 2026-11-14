@@ -33,5 +33,16 @@ public class ContactMessage {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    private boolean isRead = false;
+    /** Nullable for legacy rows; read through isRead() which treats NULL as unread. */
+    @lombok.Getter(lombok.AccessLevel.NONE)
+    @lombok.Setter(lombok.AccessLevel.NONE)
+    private Boolean isRead = false;
+
+    public boolean isRead() {
+        return Boolean.TRUE.equals(isRead);
+    }
+
+    public void setRead(boolean read) {
+        this.isRead = read;
+    }
 }
