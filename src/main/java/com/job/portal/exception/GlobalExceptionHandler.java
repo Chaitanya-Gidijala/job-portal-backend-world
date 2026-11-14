@@ -51,6 +51,18 @@ public class GlobalExceptionHandler {
                 HttpStatus.FORBIDDEN);
     }
 
+    // Keep explicit HTTP statuses (404 / 503 …) instead of collapsing them into 500
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<String> handleResponseStatusException(org.springframework.web.server.ResponseStatusException ex) {
+        return new ResponseEntity<>(ex.getReason(), ex.getStatusCode());
+    }
+
+    // A Server-Sent Events stream reached its timeout — the browser reconnects on its own
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestTimeoutException.class)
+    public ResponseEntity<Void> handleAsyncTimeout() {
+        return ResponseEntity.noContent().build();
+    }
+
     // Handle all other exceptions
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleGenericException(Exception ex) {

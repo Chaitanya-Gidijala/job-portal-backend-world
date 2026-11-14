@@ -59,13 +59,26 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/quizzes/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/prompts/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/contact/**").permitAll()
+                        // Contact form is public; reading inquiries is admin-only
+                        .requestMatchers(HttpMethod.POST, "/api/contact/submit").permitAll()
+                        .requestMatchers("/api/contact/**").hasRole("ADMIN")
                         .requestMatchers("/api/newsletter/**").permitAll()
-                        .requestMatchers("/api/analytics/**").permitAll()
+                        // Visit beacons are public; analytics reads (sessions, IPs) are admin-only
+                        .requestMatchers(HttpMethod.POST, "/api/analytics/**").permitAll()
+                        .requestMatchers("/api/analytics/**").hasRole("ADMIN")
+                        // Monitoring: public tracker ingestion, admin-only dashboard API.
+                        // The SSE stream authenticates with a one-time ticket instead of a header.
+                        .requestMatchers("/api/monitor/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/admin/monitor/stream").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Traceflow Daily: anonymous stats, result submission and SSE live stream
+                        .requestMatchers("/api/engagement/**").permitAll()
                         .requestMatchers("/api/payments/**").permitAll()
                         .requestMatchers("/api/execute-code/**").permitAll()
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Let Spring Boot's error dispatch through, so a 403 stays a 403 (not a 401)
+                        .requestMatchers("/error").permitAll()
                         // Actuator endpoints - allow health checks for Kubernetes
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
