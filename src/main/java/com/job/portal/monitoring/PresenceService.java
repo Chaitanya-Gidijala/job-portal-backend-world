@@ -27,6 +27,8 @@ import java.util.stream.Collectors;
 public class PresenceService {
 
     static final long TTL_MS = 45_000;
+    /** A tab that returns within this window continues its visit (reloads, full navigations, background tabs). */
+    static final long SESSION_RESUME_MS = 30 * 60_000L;
     static final int TRAIL = 12;
 
     /** A visitor tab that is currently open. */
@@ -62,13 +64,16 @@ public class PresenceService {
         private boolean visible = true;
         private boolean returning;
         private List<String> trail = new ArrayList<>();
+        /** Extra client details: browser/OS version, viewport, platform, cores, memory, connection, UTM … */
+        private Map<String, String> details = new LinkedHashMap<>();
 
         /** Consistent copy for serialisation while heartbeats keep mutating the original. */
         LiveSession copy() {
             synchronized (this) {
                 LiveSession c = new LiveSession();
-                org.springframework.beans.BeanUtils.copyProperties(this, c, "trail");
+                org.springframework.beans.BeanUtils.copyProperties(this, c, "trail", "details");
                 c.setTrail(new ArrayList<>(trail));
+                c.setDetails(new LinkedHashMap<>(details));
                 return c;
             }
         }
@@ -77,16 +82,19 @@ public class PresenceService {
     /** Heartbeat payload sent by the React tracker. */
     public record Ping(String sessionId, String visitorId, String path, String title, String referrer,
                        String screen, String language, String timezone, String appVersion, Boolean visible,
-                       String username) {
+                       String username, Map<String, String> client) {
     }
 
     private final GeoIpService geo;
     private final DailyAnalyticsRepository analyticsRepository;
     private final VisitorDayRepository visitorDayRepository;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     private final Map<String, LiveSession> sessions = new ConcurrentHashMap<>();
     /** ip|ua → sessionId, to attribute API requests to a visitor. */
     private final Map<String, String> clientIndex = new ConcurrentHashMap<>();
+    /** Sessions that went offline recently; a reload resumes the same visit (start time, pages, campaign). */
+    private final Map<String, LiveSession> recentlyLeft = new ConcurrentHashMap<>();
     private final AtomicLong version = new AtomicLong();
 
     private volatile LocalDate today = LocalDate.now();
@@ -97,10 +105,12 @@ public class PresenceService {
     private volatile long peakAt;
 
     public PresenceService(GeoIpService geo, DailyAnalyticsRepository analyticsRepository,
-                           VisitorDayRepository visitorDayRepository) {
+                           VisitorDayRepository visitorDayRepository,
+                           org.springframework.context.ApplicationEventPublisher events) {
         this.geo = geo;
         this.analyticsRepository = analyticsRepository;
         this.visitorDayRepository = visitorDayRepository;
+        this.events = events;
     }
 
     /** Record a heartbeat. Returns true when the visitor moved to a new page (a page view). */
@@ -112,8 +122,14 @@ public class PresenceService {
         long now = System.currentTimeMillis();
         String sessionId = ClientInfo.truncate(p.sessionId(), 64);
         boolean[] newPage = {false};
+        boolean[] newSession = {false};
 
         LiveSession s = sessions.computeIfAbsent(sessionId, id -> {
+            LiveSession resumed = recentlyLeft.remove(id);
+            if (resumed != null && now - resumed.getLastSeen() <= SESSION_RESUME_MS) {
+                return resumed; // same visit: keep start time, trail, page count and first-page details
+            }
+            newSession[0] = true;
             LiveSession n = new LiveSession();
             n.setSessionId(id);
             n.setStartedAt(now);
@@ -122,6 +138,8 @@ public class PresenceService {
             n.setBrowser(ClientInfo.browser(userAgent));
             n.setOs(ClientInfo.os(userAgent));
             n.setDevice(ClientInfo.device(userAgent));
+            n.getDetails().put("browserVersion", ClientInfo.browserWithVersion(userAgent));
+            n.getDetails().put("osVersion", ClientInfo.osWithVersion(userAgent));
             applyGeo(n, geo.cached(ip));
             geo.resolve(ip, g -> {
                 applyGeo(n, g);
@@ -139,6 +157,7 @@ public class PresenceService {
             if (p.timezone() != null) s.setTimezone(ClientInfo.truncate(p.timezone(), 60));
             if (p.appVersion() != null) s.setAppVersion(ClientInfo.truncate(p.appVersion(), 40));
             if (p.visible() != null) s.setVisible(p.visible());
+            if (p.client() != null) s.getDetails().putAll(p.client());
             String path = ClientInfo.truncate(p.path(), 300);
             if (path != null && !path.equals(s.getPath())) {
                 newPage[0] = true;
@@ -167,6 +186,11 @@ public class PresenceService {
             peakAt = now;
         }
         version.incrementAndGet();
+        try {
+            events.publishEvent(new VisitEvent(s.copy(), newSession[0], newPage[0]));
+        } catch (RuntimeException e) {
+            log.debug("visit listeners failed: {}", e.getMessage());
+        }
         return newPage[0];
     }
 
@@ -187,7 +211,9 @@ public class PresenceService {
     }
 
     public void leave(String sessionId) {
-        if (sessionId != null && sessions.remove(sessionId) != null) {
+        LiveSession gone = sessionId == null ? null : sessions.remove(sessionId);
+        if (gone != null) {
+            recentlyLeft.put(sessionId, gone);
             version.incrementAndGet();
         }
     }
@@ -221,8 +247,16 @@ public class PresenceService {
 
     @Scheduled(fixedDelay = 5_000)
     public void sweep() {
-        long cutoff = System.currentTimeMillis() - TTL_MS;
-        boolean removed = sessions.values().removeIf(s -> s.getLastSeen() < cutoff);
+        long now = System.currentTimeMillis();
+        long cutoff = now - TTL_MS;
+        boolean removed = false;
+        for (LiveSession s : List.copyOf(sessions.values())) {
+            if (s.getLastSeen() < cutoff && sessions.remove(s.getSessionId()) != null) {
+                recentlyLeft.put(s.getSessionId(), s);
+                removed = true;
+            }
+        }
+        recentlyLeft.values().removeIf(s -> now - s.getLastSeen() > SESSION_RESUME_MS);
         clientIndex.values().removeIf(id -> !sessions.containsKey(id));
         if (removed) {
             version.incrementAndGet();

@@ -73,6 +73,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleGenericException(Exception ex) {
         org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class).error("Unhandled exception", ex);
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        // Return the root cause (e.g. the actual database error), not a long framework wrapper.
+        Throwable root = ex;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        String message = root.getMessage() == null ? root.getClass().getSimpleName() : root.getMessage();
+        return new ResponseEntity<>(message.length() > 500 ? message.substring(0, 500) : message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

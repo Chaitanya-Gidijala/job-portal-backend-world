@@ -46,7 +46,7 @@ public class MonitorIngestController {
         presence.ping(new PresenceService.Ping(
                 text(n, "sessionId"), text(n, "visitorId"), text(n, "path"), text(n, "title"), text(n, "referrer"),
                 text(n, "screen"), text(n, "language"), text(n, "timezone"), text(n, "appVersion"),
-                n.has("visible") ? n.get("visible").asBoolean(true) : null, null),
+                n.has("visible") ? n.get("visible").asBoolean(true) : null, null, clientDetails(n.get("client"))),
                 ClientInfo.ip(request), request.getHeader("User-Agent"));
         return ResponseEntity.noContent().build();
     }
@@ -120,6 +120,24 @@ public class MonitorIngestController {
             budget.clear();
         }
         return budget.computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet() <= MAX_EVENTS_PER_MINUTE;
+    }
+
+    /** Whitelisted, length-capped client details sent with the first heartbeat of a session. */
+    static final java.util.Set<String> CLIENT_KEYS = java.util.Set.of(
+            "viewport", "dpr", "platform", "languages", "cores", "memory", "connection", "downlink", "saveData",
+            "touch", "colorScheme", "reducedMotion", "landing", "utmSource", "utmMedium", "utmCampaign", "utmTerm",
+            "utmContent", "cookies", "pwa", "darkMode");
+
+    static Map<String, String> clientDetails(JsonNode node) {
+        if (node == null || !node.isObject()) return null;
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        node.fields().forEachRemaining(e -> {
+            if (CLIENT_KEYS.contains(e.getKey()) && !e.getValue().isNull() && out.size() < CLIENT_KEYS.size()) {
+                String v = e.getValue().asText();
+                if (!v.isBlank()) out.put(e.getKey(), ClientInfo.truncate(v, 200));
+            }
+        });
+        return out.isEmpty() ? null : out;
     }
 
     private JsonNode parse(String body) {

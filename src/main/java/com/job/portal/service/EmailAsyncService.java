@@ -51,7 +51,20 @@ public class EmailAsyncService {
         sendEmail(donorEmail, "Thank you for your support - ChaitanyaTechWorld", userHtml);
     }
 
-    private void sendEmail(String to, String subject, String htmlContent) {
+    /** Admin notification address (app.admin-email). */
+    public String getAdminEmail() {
+        return adminEmail;
+    }
+
+    /**
+     * Synchronous send through the same Brevo integration — for callers that need
+     * the outcome (e.g. visit notifications record delivered / failed).
+     */
+    public boolean sendNow(String to, String subject, String htmlContent) {
+        return sendEmail(to, subject, htmlContent);
+    }
+
+    private boolean sendEmail(String to, String subject, String htmlContent) {
         try {
             log.info("Sending Brevo HTTP email to {}...", to);
             
@@ -72,13 +85,16 @@ public class EmailAsyncService {
             
             if (response.getStatusCode().is2xxSuccessful()) {
                 log.info("Brevo HTTP email successfully accepted for {}", to);
-            } else {
-                log.warn("Brevo HTTP email might have failed for {}. Response: {}", to, response.getBody());
+                return true;
             }
+            log.warn("Brevo HTTP email might have failed for {}. Response: {}", to, response.getBody());
+            return false;
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             log.error("Brevo API Error ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return false;
         } catch (Exception e) {
             log.error("Unexpected error while sending Brevo HTTP email to {}: {}", to, e.getMessage());
+            return false;
         }
     }
 }

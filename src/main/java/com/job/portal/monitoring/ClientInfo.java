@@ -53,6 +53,56 @@ public final class ClientInfo {
         return "Desktop";
     }
 
+    private static final java.util.List<java.util.Map.Entry<String, java.util.regex.Pattern>> BROWSER_VERSIONS = java.util.List.of(
+            java.util.Map.entry("Edge", java.util.regex.Pattern.compile("Edg(?:A|iOS)?/(\\d+)")),
+            java.util.Map.entry("Opera", java.util.regex.Pattern.compile("OPR/(\\d+)")),
+            java.util.Map.entry("Samsung Internet", java.util.regex.Pattern.compile("SamsungBrowser/(\\d+)")),
+            java.util.Map.entry("Chrome", java.util.regex.Pattern.compile("(?:Chrome|CriOS)/(\\d+)")),
+            java.util.Map.entry("Firefox", java.util.regex.Pattern.compile("(?:Firefox|FxiOS)/(\\d+)")),
+            java.util.Map.entry("Safari", java.util.regex.Pattern.compile("Version/(\\d+(?:\\.\\d+)?)")));
+
+    /** Major browser version, e.g. "Chrome 131". */
+    public static String browserWithVersion(String ua) {
+        String b = browser(ua);
+        if (ua == null) return b;
+        for (var e : BROWSER_VERSIONS) {
+            if (e.getKey().equals(b)) {
+                var m = e.getValue().matcher(ua);
+                if (m.find()) return b + " " + m.group(1);
+            }
+        }
+        return b;
+    }
+
+    /** OS with version where the user agent exposes it, e.g. "Android 14", "iOS 17.4", "macOS 10.15". */
+    public static String osWithVersion(String ua) {
+        String os = os(ua);
+        if (ua == null) return os;
+        java.util.regex.Matcher m;
+        switch (os) {
+            case "Windows" -> {
+                if (ua.contains("Windows NT 10.0")) return "Windows 10/11";
+                m = java.util.regex.Pattern.compile("Windows NT (\\d+\\.\\d+)").matcher(ua);
+                return m.find() ? "Windows NT " + m.group(1) : os;
+            }
+            case "Android" -> {
+                m = java.util.regex.Pattern.compile("Android (\\d+(?:\\.\\d+)?)").matcher(ua);
+                return m.find() ? "Android " + m.group(1) : os;
+            }
+            case "iOS" -> {
+                m = java.util.regex.Pattern.compile("OS (\\d+)_(\\d+)").matcher(ua);
+                return m.find() ? "iOS " + m.group(1) + "." + m.group(2) : os;
+            }
+            case "macOS" -> {
+                m = java.util.regex.Pattern.compile("Mac OS X (\\d+)[._](\\d+)").matcher(ua);
+                return m.find() ? "macOS " + m.group(1) + "." + m.group(2) : os;
+            }
+            default -> {
+                return os;
+            }
+        }
+    }
+
     public static boolean isBot(String ua) {
         if (ua == null) return false;
         String l = ua.toLowerCase();

@@ -47,11 +47,19 @@ public class AdminMonitorController {
     private final TrafficStatsService traffic;
     private final GeoIpService geo;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private final VisitorProfileRepository profiles;
+    private final VisitorProfileService profileService;
+    private final VisitNotificationService notifications;
+    private final MonitorSettingsService settings;
+    private final MonitoringSchemaGuard schemaGuard;
 
     public AdminMonitorController(MonitoringHub hub, PresenceService presence, SystemHealthService health,
                                   MonitorLogRepository logs, DailyAnalyticsRepository analytics,
                                   ContactRepository contacts, DailyChallengeService daily, MonitorLogWriter writer,
-                                  TrafficStatsService traffic, GeoIpService geo, org.springframework.jdbc.core.JdbcTemplate jdbc) {
+                                  TrafficStatsService traffic, GeoIpService geo, org.springframework.jdbc.core.JdbcTemplate jdbc,
+                                  VisitorProfileRepository profiles, VisitorProfileService profileService,
+                                  VisitNotificationService notifications, MonitorSettingsService settings,
+                                  MonitoringSchemaGuard schemaGuard) {
         this.hub = hub;
         this.presence = presence;
         this.health = health;
@@ -63,6 +71,11 @@ public class AdminMonitorController {
         this.traffic = traffic;
         this.geo = geo;
         this.jdbc = jdbc;
+        this.profiles = profiles;
+        this.profileService = profileService;
+        this.notifications = notifications;
+        this.settings = settings;
+        this.schemaGuard = schemaGuard;
     }
 
     @PostConstruct
@@ -111,6 +124,7 @@ public class AdminMonitorController {
             return Map.of("startedAt", rt.getStartTime(), "uptimeMs", rt.getUptime());
         });
         section(out, errors, "dailyChallenge", () -> daily.stats(daily.currentDay()));
+        section(out, errors, "visitors", this::visitorSummary);
         section(out, errors, "inquiries", () -> Map.of("total", contacts.count(), "unread", contacts.countUnread()));
         if (!out.containsKey("today")) {
             out.put("today", Map.of("views", 0L, "uniqueVisitors", 0L, "peakConcurrent", presence.peakToday()));
@@ -211,6 +225,8 @@ public class AdminMonitorController {
         out.put("pipeline", writer.status());
         out.put("geo", geo.status());
         out.put("tables", tables());
+        out.put("schema", schemaGuard.report());
+        out.put("profiles", profileService.status());
         return ApiResponse.success("Health", out);
     }
 
@@ -243,8 +259,131 @@ public class AdminMonitorController {
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Not found", null)));
     }
 
-    static final List<String> TABLES = List.of("monitor_logs", "monitor_visitor_days", "daily_challenge_results",
-            "daily_analytics", "contact_messages");
+    static final List<String> TABLES = List.of("monitor_logs", "visitor_profiles", "monitor_visitor_days",
+            "daily_challenge_results", "monitor_settings", "daily_analytics", "contact_messages");
+
+    /* ── Visitor directory (permanent profiles) ─────────────────────────── */
+
+    @GetMapping("/visitors/directory")
+    public ApiResponse<Map<String, Object>> directory(@RequestParam(required = false) String q,
+                                                      @RequestParam(required = false) String country,
+                                                      @RequestParam(required = false) String device,
+                                                      @RequestParam(required = false) String type,
+                                                      @RequestParam(required = false) Long from,
+                                                      @RequestParam(defaultValue = "lastSeen") String sort,
+                                                      @RequestParam(defaultValue = "0") int page,
+                                                      @RequestParam(defaultValue = "50") int size) {
+        Specification<VisitorProfile> spec = (root, query, cb) -> {
+            List<Predicate> p = new ArrayList<>();
+            if (country != null && !country.isBlank()) p.add(cb.equal(root.get("country"), country));
+            if (device != null && !device.isBlank()) p.add(cb.equal(root.get("device"), device));
+            if ("new".equals(type)) p.add(cb.lessThanOrEqualTo(root.get("visits"), 1));
+            if ("returning".equals(type)) p.add(cb.greaterThan(root.get("visits"), 1));
+            if ("signedIn".equals(type)) p.add(cb.isNotNull(root.get("username")));
+            if (from != null) p.add(cb.greaterThanOrEqualTo(root.get("lastSeen"), Instant.ofEpochMilli(from)));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.toLowerCase().trim() + "%";
+                p.add(cb.or(
+                        cb.like(cb.lower(root.get("visitorId")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("city"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("country"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("source"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("ip"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("isp"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("lastPage"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("username"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("email"), "")), like)));
+            }
+            return cb.and(p.toArray(new Predicate[0]));
+        };
+        String sortField = Set.of("lastSeen", "firstSeen", "visits", "pageViews").contains(sort) ? sort : "lastSeen";
+        Page<VisitorProfile> result = profiles.findAll(spec, PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 200),
+                Sort.by(Sort.Direction.DESC, sortField).and(Sort.by(Sort.Direction.DESC, "id"))));
+        return ApiResponse.success("Visitors", Map.of(
+                "items", result.getContent(),
+                "total", result.getTotalElements(),
+                "page", result.getNumber(),
+                "pages", result.getTotalPages()));
+    }
+
+    @GetMapping("/visitors/{visitorId}/profile")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> profile(@PathVariable String visitorId) {
+        return profiles.findByVisitorId(visitorId)
+                .map(v -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("profile", v);
+                    m.put("details", profileService.readDetails(v.getDetails()));
+                    m.put("online", presence.snapshot().stream().anyMatch(s -> visitorId.equals(s.getVisitorId())));
+                    return ResponseEntity.ok(ApiResponse.success("Profile", m));
+                })
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Visitor not found", null)));
+    }
+
+    @GetMapping("/visitors/summary")
+    public ApiResponse<Map<String, Object>> visitorsSummary() {
+        return ApiResponse.success("Visitor summary", visitorSummary());
+    }
+
+    Map<String, Object> visitorSummary() {
+        Instant dayAgo = Instant.now().minus(Duration.ofDays(1));
+        Instant monthAgo = Instant.now().minus(Duration.ofDays(30));
+        List<Object[]> rows = profiles.breakdownRows(monthAgo);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("total", profiles.count());
+        m.put("new24h", profiles.countByFirstSeenGreaterThanEqual(dayAgo));
+        m.put("active24h", profiles.countByLastSeenGreaterThanEqual(dayAgo));
+        m.put("returning24h", profiles.countReturningSince(dayAgo));
+        m.put("active30d", rows.size());
+        m.put("sources30d", rank(rows, 0, 8));
+        m.put("countries30d", rank(rows, 1, 8));
+        m.put("devices30d", rank(rows, 2, 5));
+        m.put("browsers30d", rank(rows, 3, 6));
+        m.put("os30d", rank(rows, 4, 6));
+        return m;
+    }
+
+    private static List<Map<String, Object>> rank(List<Object[]> rows, int col, int limit) {
+        Map<String, Long> counts = new HashMap<>();
+        for (Object[] r : rows) counts.merge(r[col] == null ? "Unknown" : String.valueOf(r[col]), 1L, Long::sum);
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(limit)
+                .map(e -> Map.<String, Object>of("name", e.getKey(), "count", e.getValue()))
+                .toList();
+    }
+
+    /* ── Visit notifications ───────────────────────────────────────────── */
+
+    @GetMapping("/notifications")
+    public ApiResponse<Map<String, Object>> notifications() {
+        Map<String, Object> m = new LinkedHashMap<>(notifications.status());
+        m.put("settings", settings.all());
+        return ApiResponse.success("Notifications", m);
+    }
+
+    @PutMapping("/notifications/settings")
+    public ResponseEntity<ApiResponse<Map<String, String>>> updateSettings(@RequestBody Map<String, String> changes) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success("Saved", settings.update(changes)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.unprocessableEntity().body(ApiResponse.error(e.getMessage(), null));
+        }
+    }
+
+    @PostMapping("/notifications/test")
+    public ApiResponse<VisitNotificationService.Outcome> testNotification() {
+        return ApiResponse.success("Test sent", notifications.sendTest());
+    }
+
+    @PostMapping("/notifications/ignore")
+    public ResponseEntity<ApiResponse<Map<String, String>>> ignore(@RequestBody Map<String, String> body) {
+        String id = body.get("visitorId");
+        if (id == null || id.isBlank() || id.length() > 64) {
+            return ResponseEntity.unprocessableEntity().body(ApiResponse.error("visitorId required", null));
+        }
+        return ResponseEntity.ok(ApiResponse.success("Ignored", settings.ignoreVisitor(id.trim())));
+    }
+
 
     /** Existence + row count of the tables the dashboard depends on (catches missing schema at a glance). */
     private List<Map<String, Object>> tables() {
