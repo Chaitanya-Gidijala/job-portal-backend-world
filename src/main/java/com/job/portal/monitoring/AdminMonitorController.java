@@ -280,6 +280,7 @@ public class AdminMonitorController {
             if ("new".equals(type)) p.add(cb.lessThanOrEqualTo(root.get("visits"), 1));
             if ("returning".equals(type)) p.add(cb.greaterThan(root.get("visits"), 1));
             if ("signedIn".equals(type)) p.add(cb.isNotNull(root.get("username")));
+            if ("identified".equals(type)) p.add(cb.isNotNull(root.get("identifiedAt")));
             if (from != null) p.add(cb.greaterThanOrEqualTo(root.get("lastSeen"), Instant.ofEpochMilli(from)));
             if (q != null && !q.isBlank()) {
                 String like = "%" + q.toLowerCase().trim() + "%";
@@ -292,7 +293,8 @@ public class AdminMonitorController {
                         cb.like(cb.lower(cb.coalesce(root.get("isp"), "")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("lastPage"), "")), like),
                         cb.like(cb.lower(cb.coalesce(root.get("username"), "")), like),
-                        cb.like(cb.lower(cb.coalesce(root.get("email"), "")), like)));
+                        cb.like(cb.lower(cb.coalesce(root.get("email"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("name"), "")), like)));
             }
             return cb.and(p.toArray(new Predicate[0]));
         };

@@ -69,6 +69,10 @@ public class SecurityConfig {
                         // Monitoring: public tracker ingestion, admin-only dashboard API.
                         // The SSE stream authenticates with a one-time ticket instead of a header.
                         .requestMatchers("/api/monitor/**").permitAll()
+                        // Growth: newsletter, push opt-in and public certificate verification
+                        .requestMatchers("/api/push/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/certificates/**").permitAll()
+                        // /api/me/** falls through to anyRequest().authenticated() (any signed-in user)
                         .requestMatchers(HttpMethod.GET, "/api/admin/monitor/stream").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Traceflow Daily: anonymous stats, result submission and SSE live stream

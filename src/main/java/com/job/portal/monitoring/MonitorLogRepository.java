@@ -20,6 +20,11 @@ public interface MonitorLogRepository extends JpaRepository<MonitorLog, Long>, J
     @Query("delete from MonitorLog l where l.createdAt < :cutoff")
     int deleteOlderThan(@Param("cutoff") Instant cutoff);
 
+    /** [label, count] of share-button clicks since a point in time. */
+    @Query("select l.label, count(l) from MonitorLog l where l.kind = 'CLICK' and l.createdAt >= :since "
+            + "and l.label like 'Share%' group by l.label order by count(l) desc")
+    List<Object[]> shareClicks(@Param("since") Instant since);
+
     /** Lightweight tuples for the 24h analytics (grouped in Java, dialect-independent). */
     @Query("select l.kind, l.status, l.createdAt, l.visitorId, l.sessionId, l.device, l.browser, l.os, l.country, l.path "
             + "from MonitorLog l where l.createdAt >= :since and l.kind in ('PAGEVIEW', 'REQUEST', 'ERROR')")

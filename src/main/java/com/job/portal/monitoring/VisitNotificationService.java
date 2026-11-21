@@ -71,6 +71,36 @@ public class VisitNotificationService {
                 new PendingVisit(e.session().getVisitorId(), e.session().getSessionId(), System.currentTimeMillis() + delayMs));
     }
 
+    private final Map<String, Long> identifyAlerts = new ConcurrentHashMap<>();
+
+    /** Email the admin when a visitor identifies themselves (sign-in, newsletter, contact form). */
+    @EventListener
+    public void onIdentified(VisitorIdentifiedEvent e) {
+        if (!settings.getBool(MonitorSettingsService.NOTIFY_ON_IDENTIFY) || e.email() == null) return;
+        String key = e.email().toLowerCase() + "|" + e.source();
+        long now = System.currentTimeMillis();
+        Long last = identifyAlerts.put(key, now);
+        if (last != null && now - last < Duration.ofHours(24).toMillis()) return; // once a day per person & channel
+        identifyAlerts.values().removeIf(t -> now - t > Duration.ofDays(2).toMillis());
+        String what = switch (e.source()) {
+            case "google" -> "signed in with Google";
+            case "github" -> "signed in with GitHub";
+            case "account" -> "signed in";
+            case "newsletter" -> "subscribed to the newsletter";
+            case "contact" -> "sent the contact form";
+            default -> "identified themselves";
+        };
+        String who = e.name() == null || e.name().isBlank() ? e.email() : e.name() + " (" + e.email() + ")";
+        String link = e.visitorId() == null ? siteUrl + "/admin/growth" : siteUrl + "/admin/visitors?visitor=" + e.visitorId();
+        String html = "<div style=\"font-family:system-ui,sans-serif\"><h2 style=\"margin:0 0 8px\">" + HtmlUtils.htmlEscape(who) + "</h2>"
+                + "<p style=\"color:#374151\">" + HtmlUtils.htmlEscape(who) + " just " + what + ".</p>"
+                + "<p><a href=\"" + HtmlUtils.htmlEscape(link) + "\" style=\"background:#6d4cff;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">View in dashboard</a></p></div>";
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            boolean ok = email.sendNow(recipient(), "👋 " + who + " " + what, html);
+            record(e.visitorId() == null ? "—" : e.visitorId(), who, ok ? "SENT" : "FAILED", ok ? "Identity alert: " + what : "Brevo rejected the identity alert");
+        });
+    }
+
     @Scheduled(fixedDelay = 10_000)
     public void processDue() {
         long now = System.currentTimeMillis();
@@ -125,10 +155,7 @@ public class VisitNotificationService {
         boolean ok = email.sendNow(to, subject, html(p.visitorId(), live, profile, visits, place));
         if (ok) {
             sentToday.incrementAndGet();
-            if (profile != null) {
-                profile.setLastNotifiedAt(Instant.now());
-                profiles.save(profile);
-            }
+            profiles.markNotified(p.visitorId(), Instant.now());
             record(p.visitorId(), place, "SENT", "to " + to);
         } else {
             record(p.visitorId(), place, "FAILED", "Brevo rejected the email — check BREVO_API_KEY and the sender address");

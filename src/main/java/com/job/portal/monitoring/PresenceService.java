@@ -38,6 +38,7 @@ public class PresenceService {
         private String visitorId;
         private String username;
         private String email;
+        private String name;
         private String ip;
         private String userAgent;
         private String browser;
@@ -93,6 +94,7 @@ public class PresenceService {
     private final Map<String, LiveSession> sessions = new ConcurrentHashMap<>();
     /** ip|ua → sessionId, to attribute API requests to a visitor. */
     private final Map<String, String> clientIndex = new ConcurrentHashMap<>();
+    private static final String AMBIGUOUS = "<ambiguous>";
     /** Sessions that went offline recently; a reload resumes the same visit (start time, pages, campaign). */
     private final Map<String, LiveSession> recentlyLeft = new ConcurrentHashMap<>();
     private final AtomicLong version = new AtomicLong();
@@ -172,7 +174,9 @@ public class PresenceService {
             }
             if (p.title() != null) s.setTitle(ClientInfo.truncate(p.title(), 200));
         }
-        clientIndex.put(clientKey(ip, userAgent), sessionId);
+        // Two live visitors behind the same IP with the same browser can't be told apart: stop guessing.
+        clientIndex.merge(clientKey(ip, userAgent), sessionId,
+                (old, cur) -> old.equals(cur) || !sessions.containsKey(old) ? cur : AMBIGUOUS);
 
         if (newPage[0]) {
             pendingViews.incrementAndGet();
@@ -210,6 +214,20 @@ public class PresenceService {
         }
     }
 
+    @org.springframework.context.event.EventListener
+    public void onIdentified(VisitorIdentifiedEvent e) {
+        if (e.visitorId() == null) return;
+        sessions.values().forEach(s -> {
+            if (!e.visitorId().equals(s.getVisitorId())) return;
+            synchronized (s) {
+                if (e.name() != null && !e.name().isBlank()) s.setName(ClientInfo.truncate(e.name(), 160));
+                if (e.email() != null) s.setEmail(ClientInfo.truncate(e.email(), 160));
+                if (e.username() != null) s.setUsername(ClientInfo.truncate(e.username(), 120));
+            }
+        });
+        version.incrementAndGet();
+    }
+
     public void leave(String sessionId) {
         LiveSession gone = sessionId == null ? null : sessions.remove(sessionId);
         if (gone != null) {
@@ -221,7 +239,7 @@ public class PresenceService {
     /** Session for an API request (matched by IP + user agent), or null. */
     public LiveSession findByClient(String ip, String userAgent) {
         String id = clientIndex.get(clientKey(ip, userAgent));
-        return id == null ? null : sessions.get(id);
+        return id == null || AMBIGUOUS.equals(id) ? null : sessions.get(id);
     }
 
     public LiveSession get(String sessionId) {

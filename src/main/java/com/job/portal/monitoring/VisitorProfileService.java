@@ -32,6 +32,7 @@ public class VisitorProfileService {
     private final VisitorProfileRepository repository;
     private final ObjectMapper mapper;
     private final Map<String, Pending> pending = new ConcurrentHashMap<>();
+    private final Map<String, VisitorIdentifiedEvent> identities = new ConcurrentHashMap<>();
     private volatile long lastFlushAt;
     private volatile String lastError;
 
@@ -56,8 +57,16 @@ public class VisitorProfileService {
         });
     }
 
+    @EventListener
+    public void onIdentified(VisitorIdentifiedEvent e) {
+        if (e.visitorId() == null || e.visitorId().isBlank()) return;
+        identities.merge(e.visitorId(), e, (older, newer) ->
+                VisitorIdentifiedEvent.rank(newer.source()) >= VisitorIdentifiedEvent.rank(older.source()) ? newer : older);
+    }
+
     @Scheduled(fixedDelay = 5_000)
     public void flush() {
+        flushIdentities();
         if (pending.isEmpty()) return;
         Map<String, Pending> batch = new HashMap<>();
         for (String id : List.copyOf(pending.keySet())) {
@@ -83,6 +92,47 @@ public class VisitorProfileService {
                 return newer;
             }));
         }
+    }
+
+    private void flushIdentities() {
+        if (identities.isEmpty()) return;
+        Map<String, VisitorIdentifiedEvent> batch = new HashMap<>();
+        for (String id : List.copyOf(identities.keySet())) {
+            VisitorIdentifiedEvent e = identities.remove(id);
+            if (e != null) batch.put(id, e);
+        }
+        try {
+            Map<String, VisitorProfile> existing = new HashMap<>();
+            repository.findByVisitorIdIn(batch.keySet()).forEach(v -> existing.put(v.getVisitorId(), v));
+            List<VisitorProfile> toSave = new ArrayList<>();
+            batch.forEach((id, e) -> {
+                VisitorProfile v = existing.get(id);
+                if (v == null) {
+                    v = new VisitorProfile();
+                    v.setVisitorId(id);
+                    v.setFirstSeen(Instant.now());
+                    v.setLastSeen(Instant.now());
+                    v.setVisits(0);
+                    v.setPageViews(0);
+                }
+                applyIdentity(v, e);
+                toSave.add(v);
+            });
+            repository.saveAll(toSave);
+        } catch (RuntimeException ex) {
+            lastError = MonitorLogWriter.rootMessage(ex);
+            log.warn("Could not save visitor identities: {}", lastError);
+            batch.forEach(identities::putIfAbsent);
+        }
+    }
+
+    static void applyIdentity(VisitorProfile v, VisitorIdentifiedEvent e) {
+        boolean stronger = VisitorIdentifiedEvent.rank(e.source()) >= VisitorIdentifiedEvent.rank(v.getIdentitySource());
+        if (e.name() != null && !e.name().isBlank() && (v.getName() == null || stronger)) v.setName(ClientInfo.truncate(e.name().trim(), 160));
+        if (e.email() != null && !e.email().isBlank() && (v.getEmail() == null || stronger)) v.setEmail(ClientInfo.truncate(e.email().trim().toLowerCase(), 160));
+        if (e.username() != null) v.setUsername(ClientInfo.truncate(e.username(), 120));
+        if (stronger) v.setIdentitySource(e.source());
+        if (v.getIdentifiedAt() == null) v.setIdentifiedAt(Instant.now());
     }
 
     private VisitorProfile apply(VisitorProfile v, String visitorId, Pending p) {
@@ -127,8 +177,11 @@ public class VisitorProfileService {
         v.setLanguage(ClientInfo.truncate(s.getLanguage(), 20));
         v.setScreen(ClientInfo.truncate(s.getScreen(), 20));
         v.setBot("Bot".equals(s.getDevice()));
-        if (s.getUsername() != null) v.setUsername(ClientInfo.truncate(s.getUsername(), 120));
-        if (s.getEmail() != null) v.setEmail(ClientInfo.truncate(s.getEmail(), 160));
+        // Session identity is inferred from IP + browser; an explicit identity (sign-in, newsletter, contact) always wins.
+        if (v.getIdentifiedAt() == null) {
+            if (s.getUsername() != null) v.setUsername(ClientInfo.truncate(s.getUsername(), 120));
+            if (s.getEmail() != null) v.setEmail(ClientInfo.truncate(s.getEmail(), 160));
+        }
 
         Map<String, String> merged = new TreeMap<>(readDetails(v.getDetails()));
         merged.putAll(d);
@@ -160,7 +213,7 @@ public class VisitorProfileService {
 
     public Map<String, Object> status() {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("pending", pending.size());
+        m.put("pending", pending.size() + identities.size());
         m.put("lastFlushAt", lastFlushAt == 0 ? null : lastFlushAt);
         m.put("lastError", lastError);
         return m;

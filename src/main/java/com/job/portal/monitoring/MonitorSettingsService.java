@@ -20,14 +20,33 @@ public class MonitorSettingsService {
     public static final String NOTIFY_RECIPIENT = "notify.recipient";
     public static final String NOTIFY_IGNORE = "notify.ignoreVisitors"; // comma-separated visitor ids
     public static final String NOTIFY_SKIP_BOTS = "notify.skipBots";
+    public static final String NOTIFY_ON_IDENTIFY = "notify.onIdentify";   // email when someone signs in / subscribes / writes
+    public static final String DIGEST_DAILY = "digest.daily";              // daily puzzle email to subscribers
+    public static final String DIGEST_WEEKLY = "digest.weekly";            // Monday summary email
+    public static final String DIGEST_CAP = "digest.cap";                  // max subscriber emails per run
+    public static final String PUSH_DAILY = "push.daily";                  // daily "puzzle is live" push
+    public static final String INDEXNOW_KEY = "seo.indexnowKey";
+    /** Internal (never exposed or editable through the API). */
+    public static final String PUSH_VAPID_PUBLIC = "push.vapidPublic";
+    public static final String PUSH_VAPID_PRIVATE = "push.vapidPrivate";
 
-    static final Map<String, String> DEFAULTS = Map.of(
-            NOTIFY_MODE, "EVERY_VISIT",
-            NOTIFY_COOLDOWN_HOURS, "6",
-            NOTIFY_DAILY_CAP, "50",
-            NOTIFY_RECIPIENT, "",
-            NOTIFY_IGNORE, "",
-            NOTIFY_SKIP_BOTS, "true");
+    static final Set<String> INTERNAL = Set.of(PUSH_VAPID_PUBLIC, PUSH_VAPID_PRIVATE);
+    static final Set<String> BOOLEANS = Set.of(NOTIFY_SKIP_BOTS, NOTIFY_ON_IDENTIFY, DIGEST_DAILY, DIGEST_WEEKLY, PUSH_DAILY);
+
+    static final Map<String, String> DEFAULTS = Map.ofEntries(
+            Map.entry(NOTIFY_MODE, "EVERY_VISIT"),
+            Map.entry(NOTIFY_COOLDOWN_HOURS, "6"),
+            Map.entry(NOTIFY_DAILY_CAP, "50"),
+            Map.entry(NOTIFY_RECIPIENT, ""),
+            Map.entry(NOTIFY_IGNORE, ""),
+            Map.entry(NOTIFY_SKIP_BOTS, "true"),
+            Map.entry(NOTIFY_ON_IDENTIFY, "true"),
+            Map.entry(DIGEST_DAILY, "true"),
+            Map.entry(DIGEST_WEEKLY, "true"),
+            Map.entry(DIGEST_CAP, "200"),
+            Map.entry(PUSH_DAILY, "true"),
+            // Must match the key file served at the site root (frontend public/<key>.txt).
+            Map.entry(INDEXNOW_KEY, "c7f3a91e5b2d48e0a6f1c3d9b8e27a54"));
 
     private final MonitorSettingRepository repository;
     private final Map<String, String> cache = new ConcurrentHashMap<>();
@@ -78,7 +97,20 @@ public class MonitorSettingsService {
         load();
         Map<String, String> out = new TreeMap<>(DEFAULTS);
         out.putAll(cache);
+        INTERNAL.forEach(out::remove);
         return out;
+    }
+
+    /** Internal values (e.g. generated VAPID keys) — not part of the editable settings. */
+    public String internal(String key) {
+        load();
+        return cache.get(key);
+    }
+
+    public void setInternal(String key, String value) {
+        if (!INTERNAL.contains(key)) throw new IllegalArgumentException("Not an internal key: " + key);
+        repository.save(new MonitorSetting(key, value));
+        cache.put(key, value);
     }
 
     /** Validate and persist a batch of settings; returns the full settings map. */
@@ -94,7 +126,10 @@ public class MonitorSettingsService {
                 }
                 case NOTIFY_COOLDOWN_HOURS -> requireInt(value, 0, 720);
                 case NOTIFY_DAILY_CAP -> requireInt(value, 0, 1000);
-                case NOTIFY_SKIP_BOTS -> value = String.valueOf(Boolean.parseBoolean(value));
+                case DIGEST_CAP -> requireInt(value, 0, 5000);
+                case INDEXNOW_KEY -> {
+                    if (!value.matches("^[a-zA-Z0-9-]{8,128}$")) throw new IllegalArgumentException("Invalid IndexNow key");
+                }
                 case NOTIFY_RECIPIENT -> {
                     if (!value.isEmpty() && !value.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) throw new IllegalArgumentException("Invalid email");
                 }
@@ -103,6 +138,7 @@ public class MonitorSettingsService {
                 }
                 default -> { }
             }
+            if (BOOLEANS.contains(key)) value = String.valueOf(Boolean.parseBoolean(value));
             repository.save(new MonitorSetting(key, value));
             cache.put(key, value);
         }

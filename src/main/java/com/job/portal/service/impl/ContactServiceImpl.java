@@ -20,6 +20,7 @@ public class ContactServiceImpl implements ContactService {
 
     private final ContactRepository contactRepository;
     private final com.job.portal.service.EmailAsyncService emailAsyncService;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     @Override
     @Transactional
@@ -36,6 +37,8 @@ public class ContactServiceImpl implements ContactService {
 
         contactRepository.save(message);
         log.info("Saved contact message to database with ID: {}", message.getId());
+        events.publishEvent(new com.job.portal.monitoring.VisitorIdentifiedEvent(
+                request.getVisitorId(), request.getName(), request.getEmail(), null, "contact"));
 
         // Truly decouple email sending to ensure immediate API response
         java.util.concurrent.CompletableFuture.runAsync(() -> {

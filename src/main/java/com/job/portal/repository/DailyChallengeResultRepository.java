@@ -14,6 +14,12 @@ public interface DailyChallengeResultRepository extends JpaRepository<DailyChall
 
     Optional<DailyChallengeResult> findByChallengeDayAndLearnerId(int challengeDay, String learnerId);
 
+    List<DailyChallengeResult> findByChallengeDayOrderByScoreDescDurationMsAsc(int challengeDay, org.springframework.data.domain.Pageable pageable);
+
+    List<DailyChallengeResult> findByChallengeDayBetween(int fromDay, int toDay);
+
+    List<DailyChallengeResult> findByLearnerIdAndChallengeDayBetween(String learnerId, int fromDay, int toDay);
+
     /** Rows of [score, count, sum(durationMs)] for one puzzle. */
     @Query("select r.score, count(r), sum(r.durationMs) from DailyChallengeResult r "
             + "where r.challengeDay = :day group by r.score")

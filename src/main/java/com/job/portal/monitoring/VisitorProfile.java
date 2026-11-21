@@ -101,6 +101,17 @@ public class VisitorProfile {
     @Column(length = 160)
     private String email;
 
+    /** Real name, once the visitor identifies themselves (sign-in, contact form, newsletter). */
+    @Column(length = 160)
+    private String name;
+
+    /** How we know who they are: google, github, account, contact, newsletter. */
+    @Column(name = "identity_source", length = 20)
+    private String identitySource;
+
+    @Column(name = "identified_at")
+    private Instant identifiedAt;
+
     private Boolean bot;
 
     @Column(name = "last_notified_at")

@@ -18,6 +18,10 @@ import lombok.ToString;
 @AllArgsConstructor
 public class ContactRequest {
 
+    /** Anonymous visitor id of the sender (optional) — links the inquiry to their visitor profile. */
+    @jakarta.validation.constraints.Size(max = 64)
+    private String visitorId;
+
     @NotBlank(message = "Name is required")
     private String name;
 

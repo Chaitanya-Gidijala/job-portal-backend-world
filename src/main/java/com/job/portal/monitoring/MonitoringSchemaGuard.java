@@ -61,10 +61,27 @@ public class MonitoringSchemaGuard {
                     c("region", "VARCHAR(120)"), c("city", "VARCHAR(120)"), c("timezone", "VARCHAR(60)"), c("isp", "VARCHAR(160)"),
                     c("ip", "VARCHAR(64)"), c("browser", "VARCHAR(60)"), c("os", "VARCHAR(60)"), c("device", "VARCHAR(20)"),
                     c("language", "VARCHAR(20)"), c("screen", "VARCHAR(20)"), c("username", "VARCHAR(120)"),
-                    c("email", "VARCHAR(160)"), c("bot", "BOOLEAN"), c("last_notified_at", "TS"), c("details", "VARCHAR(4000)")),
+                    c("email", "VARCHAR(160)"), c("bot", "BOOLEAN"), c("last_notified_at", "TS"), c("details", "VARCHAR(4000)"),
+                    c("name", "VARCHAR(160)"), c("identity_source", "VARCHAR(20)"), c("identified_at", "TS")),
                     List.of(List.of("visitor_id")), List.of("last_seen", "first_seen"), null),
             new Table("monitor_settings", false, List.of(nn("setting_key", "VARCHAR(80)"), c("setting_value", "VARCHAR(2000)")),
-                    List.of(), List.of(), "setting_key"));
+                    List.of(), List.of(), "setting_key"),
+            new Table("newsletter_subscribers", true, List.of(
+                    c("email", "VARCHAR(255)"), c("subscribed_at", "TSL"), c("name", "VARCHAR(120)"), c("visitor_id", "VARCHAR(64)"),
+                    c("source", "VARCHAR(60)"), c("wants_daily", "BOOLEAN"), c("wants_weekly", "BOOLEAN"), c("active", "BOOLEAN"),
+                    c("token", "VARCHAR(48)"), c("last_sent_at", "TS"), c("unsubscribed_at", "TS")),
+                    List.of(), List.of("token"), null),
+            new Table("user_progress", false, List.of(
+                    nn("username", "VARCHAR(120)"), c("email", "VARCHAR(160)"), c("data", "BIGTEXT"), c("updated_at", "TS")),
+                    List.of(), List.of(), "username"),
+            new Table("certificates", false, List.of(
+                    nn("code", "VARCHAR(16)"), nn("kind", "VARCHAR(40)"), nn("title", "VARCHAR(200)"), c("description", "VARCHAR(500)"),
+                    nn("recipient_name", "VARCHAR(120)"), c("username", "VARCHAR(120)"), c("email", "VARCHAR(160)"), nn("issued_at", "TS")),
+                    List.of(), List.of("username"), "code"),
+            new Table("push_subscriptions", true, List.of(
+                    nn("endpoint", "VARCHAR(600)"), nn("p256dh", "VARCHAR(200)"), nn("auth", "VARCHAR(100)"), c("visitor_id", "VARCHAR(64)"),
+                    c("created_at", "TS"), c("last_success_at", "TS"), c("failures", "INTEGER")),
+                    List.of(List.of("endpoint")), List.of(), null));
 
     private final DataSource dataSource;
     private final List<String> actions = new ArrayList<>();
@@ -173,6 +190,8 @@ public class MonitoringSchemaGuard {
     static String type(String token, boolean mysql) {
         return switch (token) {
             case "TS" -> mysql ? "DATETIME(6)" : "TIMESTAMP(6) WITH TIME ZONE";
+            case "TSL" -> mysql ? "DATETIME(6)" : "TIMESTAMP(6)";
+            case "BIGTEXT" -> mysql ? "MEDIUMTEXT" : "VARCHAR(100000)";
             default -> token;
         };
     }
